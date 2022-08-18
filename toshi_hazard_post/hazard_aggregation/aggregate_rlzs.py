@@ -79,7 +79,8 @@ def load_realization_values(toshi_ids, locs, vs30s):
     return values
 
 
-def build_rlz_table(branch, vs30, correlations=None):
+# TODO: Refactor to reduce McCabe complexity score ( and intelligibility )
+def build_rlz_table(branch, vs30, correlations=None):  # noqa: C901
     """
     build the table of ground motion combinations and weights for a single source branch
     assumes only one source per run and the same gsim weights in every run
