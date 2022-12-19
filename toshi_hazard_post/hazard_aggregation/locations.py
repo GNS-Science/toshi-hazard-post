@@ -5,16 +5,115 @@ from nzshm_common.location.code_location import CodedLocation
 from nzshm_common.location.location import LOCATIONS_BY_ID
 
 
+def stat_test_missing():
+
+    locations = [
+        # (-38.100, 176.800),
+        (-42.400, 171.200),
+        # (-42.100, 171.900),
+    ]
+
+    return [(round(loc[0], 1), round(loc[1], 1)) for loc in locations]
+
+
+def stat_test_64():
+
+    locations = [
+        (-42.117, 171.86),
+        (-38.114, 176.817),
+        (-39.717, 175.138),
+        (-41.802, 172.318),
+        (-42.449, 171.211),
+        (-42.718, 170.964),
+        (-42.949, 171.568),
+        (-43.274, 172.596),
+        (-43.483, 172.53),
+        (-42.813, 173.275),
+        (-43.566, 172.624),
+        (-40.899, 176.221),
+        (-43.227, 171.724),
+        (-43.312, 172.381),
+        (-43.49, 172.102),
+        (-45.902, 170.493),
+        (-43.667, 172.198),
+        (-40.649, 175.709),
+        (-40.214, 175.573),
+        (-44.099, 170.829),
+        (-38.666, 178.023),
+        (-43.883, 169.044),
+        (-43.54, 171.96),
+        (-42.523, 172.83),
+        (-41.077, 175.23),
+        (-41.197, 174.892),
+        (-43.715, 169.423),
+        (-45.521, 167.278),
+        (-41.211, 175.461),
+        (-41.508, 173.944),
+        (-41.265, 174.706),
+        (-42.088, 173.257),
+        (-43.706, 172.654),
+        (-41.271, 173.284),
+        (-39.507, 176.897),
+        (-43.996, 168.661),
+        (-43.445, 172.661),
+        (-43.326, 172.038),
+        (-40.914, 175.005),
+        (-43.924, 171.234),
+        (-40.302, 176.612),
+        (-45.032, 168.663),
+        (-43.751, 172.023),
+        (-46.147, 167.473),
+        (-43.809, 172.252),
+        (-43.675, 172.318),
+        (-43.607, 172.645),
+        (-43.369, 172.495),
+        (-46.537, 169.139),
+        (-45.417, 167.719),
+        (-38.373, 178.301),
+        (-41.21, 174.276),
+        (-37.633, 178.365),
+        (-40.849, 172.821),
+        (-38.807, 177.15),
+        (-41.28, 174.778),
+        (-41.231, 174.931),
+        (-41.756, 171.6),
+        (-41.827, 174.138),
+        (-40.338, 175.87),
+        (-41.284, 174.768),
+        (-42.701, 172.8),
+        (-39.944, 176.584),
+        (-41.62, 173.351),
+    ]
+
+    return [(round(loc[0], 1), round(loc[1], 1)) for loc in locations]
+
+
 def get_locations(config):
 
-    if config.locations == "NZ_34":
+    if type(config.locations) is list:
+        locations = []
+        for loc in config.locations:
+            if '~' in loc:
+                locations.append(tuple(map(float, loc.split('~'))))
+            else:
+                locations.append((LOCATIONS_BY_ID[loc]['latitude'], LOCATIONS_BY_ID[loc]['longitude']))
+    elif config.locations == "NZ_34":
         locations = [(loc['latitude'], loc['longitude']) for loc in LOCATIONS_BY_ID.values()]
+        if config.location_limit:
+            locations = locations[: config.location_limit]
+    elif config.locations == "STAT_TEST_64":
+        locations = stat_test_64()
+    elif config.locations == 'STAT_TEST_MISSING':
+        locations = stat_test_missing()
     else:
         locations = (
             load_grid(config.locations)
             if not config.location_limit
             else load_grid(config.locations)[: config.location_limit]
         )
+    if config.locations == 'NZ_0_1_NB_1_1':  # TODO: hacky fix to a missing point in the oq calculation grid
+        l = locations.index((-34.7, 172.7))
+        locations = locations[0:l] + locations[l + 1 :]
 
     return locations
 

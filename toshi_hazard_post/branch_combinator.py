@@ -20,6 +20,13 @@ def get_weighted_branches(grouped_ltbs, correlations=None):
     # TODO: only handles one combined job and one permutation set
     permute = grouped_ltbs  # tree_permutations[0][0]['permute']
 
+    # turn off correlations if there is a missing group
+    if correlations:
+        group1 = set([cr[0]['group'] for cr in correlations['correlations']])
+        group2 = set([cr[1]['group'] for cr in correlations['correlations']])
+        if not all([gr in grouped_ltbs.keys() for gr in group1.union(group2)]):
+            correlations = None
+
     # check that each permute group weights sum to 1.0
     for key, group in permute.items():
         group_weight = 0
@@ -40,7 +47,6 @@ def get_weighted_branches(grouped_ltbs, correlations=None):
             )
         id_groups.append(id_group)
 
-    # breakpoint()
     branches = itertools.product(*id_groups)
     source_branches = []
     for i, branch in enumerate(branches):
@@ -79,15 +85,16 @@ def weight_and_ids(data):
     def get_vs30(args):
         for arg in args:
             if arg['k'] == "vs30":
-                return int(arg['v'])
+                return int(float(arg['v']))
         assert 0
 
     nodes = data['data']['node1']['children']['edges']
     for obj in nodes:
-        tag = get_tag(obj['node']['child']['arguments'])
-        vs30 = get_vs30(obj['node']['child']['arguments'])
-        hazard_solution_id = obj['node']['child']['hazard_solution']['id']
-        yield Member(**tag[0]['members'][0], group=None, hazard_solution_id=hazard_solution_id, vs30=vs30)
+        if obj['node']['child']['hazard_solution']:
+            tag = get_tag(obj['node']['child']['arguments'])
+            vs30 = get_vs30(obj['node']['child']['arguments'])
+            hazard_solution_id = obj['node']['child']['hazard_solution']['id']
+            yield Member(**tag[0]['members'][0], group=None, hazard_solution_id=hazard_solution_id, vs30=vs30)
 
 
 def all_members_dict(ltbs):

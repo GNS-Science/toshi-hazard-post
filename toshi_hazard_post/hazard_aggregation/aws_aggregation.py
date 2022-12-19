@@ -3,7 +3,7 @@ import json
 import logging
 from dataclasses import asdict
 from pathlib import Path
-from typing import Dict
+from typing import Dict, List
 
 import boto3
 from nzshm_common.location.code_location import CodedLocation
@@ -77,6 +77,7 @@ def save_source_branches(source_branches):
 
 def distribute_aggregation(config: AggregationConfig, process_mode: str):
     """Configure the tasks using toshi to store the configuration."""
+    omit: List[str] = []
 
     toshi_ids = {}
     for vs30 in config.vs30s:
@@ -92,6 +93,7 @@ def distribute_aggregation(config: AggregationConfig, process_mode: str):
         log.info("reuse sources_branches_id: %s" % config.reuse_source_branches_id)
         source_branches_id = config.reuse_source_branches_id
         source_branches = fetch_source_branches(source_branches_id)
+        source_branches = {int(k): v for k, v in source_branches.items()}
     else:
         log.info("building the sources branches.")
 
@@ -103,7 +105,8 @@ def distribute_aggregation(config: AggregationConfig, process_mode: str):
                 config.src_correlations,
                 config.gmm_correlations,
                 vs30,
-                omit=[],
+                omit,
+                toshi_ids[vs30],
                 truncate=config.source_branches_truncate,
             )
         source_branches_id = save_source_branches(source_branches)
@@ -120,6 +123,7 @@ def distribute_aggregation(config: AggregationConfig, process_mode: str):
         source_branches[config.vs30s[0]], [example_loc_code.code], config.vs30s[0]
     )  # TODO: get separate levels for every IMT ?
     avail_imts = get_imts(source_branches[config.vs30s[0]], config.vs30s[0])
+    log.info(f'available imts: {avail_imts}')
     for imt in config.imts:
         assert imt in avail_imts
 
