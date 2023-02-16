@@ -9,7 +9,7 @@ from pathlib import Path
 # from toshi_hazard_store.aggregate_rlzs import get_imts, get_levels, process_location_list
 # from toshi_hazard_store.branch_combinator.branch_combinator import get_weighted_branches, grouped_ltbs, merge_ltbs
 from toshi_hazard_post.branch_combinator import get_weighted_branches, grouped_ltbs, merge_ltbs
-from toshi_hazard_store.locations import locations_nzpt2_and_nz34_binned, locations_nzpt2_and_nz34_chunked
+from toshi_hazard_post.hazard_aggregation.locations import locations_nzpt2_and_nz34_binned, locations_nzpt2_and_nz34_chunked
 
 # from toshi_hazard_store.branch_combinator.SLT_37_GRANULAR_RELEASE_1 import logic_tree_permutations
 # from toshi_hazard_store.branch_combinator.SLT_37_GT_VS400_gsim_DATA import data as gtdata
@@ -87,17 +87,23 @@ class TestBuldRealizationTable(unittest.TestCase):
         self._sb_file = Path(Path(__file__).parent, 'fixtures/branch_combinator', 'source_branches_correlated.json')
         self._rlz_combs_filepath = Path(Path(__file__).parent, 'fixtures/aggregation', 'rlz_combs.json')
         self._weight_combs_filepath = Path(Path(__file__).parent, 'fixtures/aggregation', 'weight_combs.json')
+        self._metadata_filepath = Path(Path(__file__).parent, 'fixtures/aggregation', 'metadata.json')
 
     def test_build_rlz_table(self):
 
+        metadata = json.load(open(self._metadata_filepath, 'r'))
         source_branches = json.load(open(self._sb_file, 'r'))
-        rlz_combs, weight_combs = build_rlz_table(source_branches[0], 400)
+        rlz_combs, weight_combs = build_rlz_table(source_branches[0], metadata)
 
         rlz_combs_expected = json.load(open(self._rlz_combs_filepath, 'r'))
         weight_combs_expected = json.load(open(self._weight_combs_filepath, 'r'))
 
-        assert rlz_combs == rlz_combs_expected
-        assert weight_combs == weight_combs_expected
+        rlz_combs_expected = [set(rce) for rce in rlz_combs_expected]
+        rlz_combs = [set(rc) for rc in rlz_combs]
+
+        for wce, rce in zip(weight_combs_expected, rlz_combs_expected):
+            assert rce in rlz_combs
+            assert weight_combs[rlz_combs.index(rce)] == pytest.approx(wce)
 
         assert sum(weight_combs) == pytest.approx(1.0)
 
@@ -106,6 +112,7 @@ class TestCorrelatiedRealizationTable(unittest.TestCase):
     def setUp(self):
         self._sb_file = Path(Path(__file__).parent, 'fixtures/branch_combinator', 'source_branches_correlated.json')
         self._rlz_combs_filepath = Path(Path(__file__).parent, 'fixtures/aggregation', 'rlz_combs_corr.json')
+        self._metadata_filepath = Path(Path(__file__).parent, 'fixtures/aggregation', 'metadata.json')
 
     def test_build_correlated_rlz_table(self):
 
@@ -132,12 +139,17 @@ class TestCorrelatiedRealizationTable(unittest.TestCase):
             ('[ParkerEtAl2020SInter]', '[ParkerEtAl2020SSlab]'),
         ]
 
+        metadata = json.load(open(self._metadata_filepath, 'r'))
         source_branches = json.load(open(self._sb_file, 'r'))
-        rlz_combs, weight_combs = build_rlz_table(source_branches[0], 400, correlations)
+        rlz_combs, weight_combs = build_rlz_table(source_branches[0], metadata, correlations)
 
         rlz_combs_expected = json.load(open(self._rlz_combs_filepath, 'r'))
 
-        assert rlz_combs == rlz_combs_expected
+        rlz_combs_expected = [set(rce) for rce in rlz_combs_expected]
+        rlz_combs = [set(rc) for rc in rlz_combs]
+
+        for rce in rlz_combs_expected:
+            assert rce in rlz_combs
 
         assert sum(weight_combs) == pytest.approx(1.0)
 

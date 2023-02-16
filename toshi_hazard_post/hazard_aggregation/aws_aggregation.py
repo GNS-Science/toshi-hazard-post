@@ -3,7 +3,7 @@ import json
 import logging
 from dataclasses import asdict
 from pathlib import Path
-from typing import Dict
+from typing import Dict, List
 
 import boto3
 from nzshm_common.location.code_location import CodedLocation
@@ -24,7 +24,7 @@ from .aggregation import DistributedAggregationTaskArguments, build_source_branc
 # from toshi_hazard_post.util.util import compress_config
 from .aggregation_config import AggregationConfig
 from .aggregation_task import fetch_source_branches
-from .toshi_api_support import save_sources_to_toshi
+from .toshi_api_support import save_sources_to_toshi, get_multi_gtdata
 
 log = logging.getLogger(__name__)
 
@@ -77,12 +77,15 @@ def save_source_branches(source_branches):
 
 def distribute_aggregation(config: AggregationConfig, process_mode: str):
     """Configure the tasks using toshi to store the configuration."""
+    omit: List[str] = []
+
+    gtdata = get_multi_gtdata(config.gtids)
 
     toshi_ids = {}
     for vs30 in config.vs30s:
         toshi_ids[vs30] = [
             branch.hazard_solution_id
-            for branch in merge_ltbs_fromLT(config.logic_tree_permutations, gtdata=config.hazard_solutions, omit=[])
+            for branch in merge_ltbs_fromLT(config.logic_tree_permutations, gtdata=gtdata, omit=[])
             if branch.vs30 == vs30
         ]
     log.debug("toshi_ids: %s" % toshi_ids)
@@ -92,6 +95,7 @@ def distribute_aggregation(config: AggregationConfig, process_mode: str):
         log.info("reuse sources_branches_id: %s" % config.reuse_source_branches_id)
         source_branches_id = config.reuse_source_branches_id
         source_branches = fetch_source_branches(source_branches_id)
+        source_branches = {int(k): v for k, v in source_branches.items()}
     else:
         log.info("building the sources branches.")
 
@@ -99,11 +103,12 @@ def distribute_aggregation(config: AggregationConfig, process_mode: str):
         for vs30 in config.vs30s:
             source_branches[vs30] = build_source_branches(
                 config.logic_tree_permutations,
-                config.hazard_solutions,
+                gtdata,
                 config.src_correlations,
                 config.gmm_correlations,
                 vs30,
-                omit=[],
+                omit,
+                toshi_ids[vs30],
                 truncate=config.source_branches_truncate,
             )
         source_branches_id = save_source_branches(source_branches)
@@ -120,6 +125,7 @@ def distribute_aggregation(config: AggregationConfig, process_mode: str):
         source_branches[config.vs30s[0]], [example_loc_code.code], config.vs30s[0]
     )  # TODO: get separate levels for every IMT ?
     avail_imts = get_imts(source_branches[config.vs30s[0]], config.vs30s[0])
+    log.info(f'available imts: {avail_imts}')
     for imt in config.imts:
         assert imt in avail_imts
 
