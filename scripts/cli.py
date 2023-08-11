@@ -173,7 +173,7 @@ def cli_gridded_hazard(
     '--mode',
     '-m',
     default=lambda: os.environ.get("NZSHM22_THP_MODE", 'LOCAL'),
-    type=click.Choice(['AWS', 'AWS_BATCH', 'LOCAL'], case_sensitive=True),
+    type=click.Choice(['AWS_BATCH', 'LOCAL'], case_sensitive=True),
 )
 @click.option('--deagg', '-d', is_flag=True)
 @click.option('--push-sns-test', '-pt', is_flag=True)

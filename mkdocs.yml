@@ -7,7 +7,7 @@ nav:
   - Home: index.md
   - Installation: installation.md
   - Usage: usage.md
-  - Modules: api.md
+  - Architecture: architecture.md
   - Contributing: contributing.md
   - Changelog: changelog.md
 theme:
@@ -15,13 +15,22 @@ theme:
   language: en
   #logo: assets/logo.png
   palette:
-    scheme: preference
-    primary: indigo
-    accent: indigo
+    # Palette toggle for light mode
+    - scheme: default
+      toggle:
+        icon: material/brightness-7 
+        name: Switch to dark mode
+
+    # Palette toggle for dark mode
+    - scheme: slate
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
   features:
     - navigation.indexes
     - navigation.instant
     - navigation.tabs.sticky
+    - content.code.copy
 markdown_extensions:
   - pymdownx.emoji:
       emoji_index: !!python/name:materialx.emoji.twemoji
@@ -36,7 +45,11 @@ markdown_extensions:
       generic: true
   - pymdownx.highlight:
       linenums: false
-  - pymdownx.superfences
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
   - pymdownx.inlinehilite
   - pymdownx.details
   - admonition
@@ -54,21 +67,13 @@ plugins:
         - toshi_hazard_post
 extra:
   social:
-    # - icon: fontawesome/brands/twitter
-    #   # replace with your own tweet link below
-    #   link: https://github.com/waynerv/cookiecutter-pypackage
-    #   name: Tweet
-    # - icon: fontawesome/brands/facebook
-    #   # replace with your own facebook link below
-    #   link: https://github.com/waynerv/cookiecutter-pypackage
-    #   name: Facebook
-    # - icon: fontawesome/brands/github
-    #   link: https://github.com/gns-science/toshi-hazard-post
-    #   name: Github
+    - icon: fontawesome/brands/github
+      link: https://github.com/GNS-Science/toshi-hazard-post
+      name: Github
     - icon: material/email
-      link: "mailto:chrisbc@artisan.co.nz"
-  # to enable disqus, uncomment the following and put your disqus id below
-  # disqus: disqus_id
+      link: "mailto:nshm@gns.cri.nz"
+extra_javascript:
+  - https://unpkg.com/mermaid@9.0.0/dist/mermaid.min.js
 # uncomment the following and put your google tracking id below to enable GA
 #google_analytics:
   #- UA-xxx

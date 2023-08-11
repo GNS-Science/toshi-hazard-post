@@ -1,6 +1,6 @@
 # `python-base` sets up all our shared environment variables
-FROM python:3.8-slim as python-base
-LABEL GNS Science, NSHM Project <chrisbc@artisan.co.nz>
+FROM python:3.10-slim as python-base
+LABEL GNS Science, NSHM Project <nshm@gns.cri.nz>
 
 # ref https://stackoverflow.com/a/69094575 for templates
 
@@ -9,7 +9,7 @@ ENV PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=off \
     PIP_DISABLE_PIP_VERSION_CHECK=on \
     PIP_DEFAULT_TIMEOUT=100 \
-    POETRY_VERSION=1.2.2 \
+    POETRY_VERSION=1.4.0 \
     POETRY_HOME="/opt/poetry" \
     POETRY_VIRTUALENVS_IN_PROJECT=true \
     PYTHONPATH=/application_root \
