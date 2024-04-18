@@ -2,7 +2,7 @@ import pytest
 from pathlib import Path
 from nzshm_common.location.location import CodedLocation
 from toshi_hazard_post.version2.data import ValueStore, load_realizations
-from toshi_hazard_post.version2.logic_tree import HazardBranch, HazardLogicTree
+from toshi_hazard_post.version2.logic_tree import HazardComponentBranch, HazardLogicTree
 from nzshm_model.logic_tree import SourceBranch, GMCMBranch, SourceLogicTree, GMCMLogicTree
 import numpy as np
 
@@ -11,7 +11,7 @@ def test_valuestore():
     values = np.linspace(0, 1, 10)
     gmcm_branch = GMCMBranch("gmcm b1", 1.0, "my_gmm", {}, "Crust")
     source_branch = SourceBranch("source b1", 1.0, tectonic_region_types=("Crust",))
-    branch = HazardBranch(source_branch, [gmcm_branch])
+    branch = HazardComponentBranch(source_branch, [gmcm_branch])
     value_store = ValueStore()
     value_store.set_values(values, branch)
 
@@ -34,7 +34,7 @@ def test_loadrlz():
     assert (len(value_store._values)) == 36 * 3 + 9 * 2 + 3 * 2 + 1 * 2
 
     with pytest.raises(KeyError):
-        value_store.get_values(HazardBranch(SourceBranch(), [GMCMBranch()]))
+        value_store.get_values(HazardComponentBranch(SourceBranch(), [GMCMBranch()]))
 
     for branch in logic_tree.component_branches:
         assert isinstance(value_store.get_values(branch), np.ndarray)

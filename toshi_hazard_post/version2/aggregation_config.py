@@ -1,9 +1,11 @@
-from typing import Union
 import csv
+from collections import namedtuple
 from pathlib import Path
+from typing import Union
+
 import toml
 from nzshm_model import all_model_versions
-from collections import namedtuple
+
 from toshi_hazard_post.version2.ths_mock import query_compatibility
 
 

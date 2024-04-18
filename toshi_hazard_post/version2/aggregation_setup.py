@@ -1,20 +1,19 @@
 import csv
-from dataclasses import dataclass
 from collections import namedtuple
-from typing import Tuple, TYPE_CHECKING, Iterable, List, Union, Generator
-from pathlib import Path
+from dataclasses import dataclass
 from itertools import product
+from pathlib import Path
+from typing import TYPE_CHECKING, Generator, Iterable, List, Tuple, Union
 
-from toshi_hazard_post.version2.aggregation_config import AggregationConfig
+from nzshm_common.location.code_location import CodedLocation
 from nzshm_common.location.location import get_locations
 from nzshm_model import get_model_version
-from nzshm_common.location.code_location import CodedLocation
 from nzshm_model.logic_tree import GMCMLogicTree, SourceLogicTree
 
+from toshi_hazard_post.version2.aggregation_config import AggregationConfig
 
 if TYPE_CHECKING:
     import numpy.typing as npt
-
 
 from toshi_hazard_post.version2.ths_mock import query_levels
 

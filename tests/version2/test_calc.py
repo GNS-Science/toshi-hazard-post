@@ -84,6 +84,9 @@ def stats():
 def test_weighted_stats(stats):
     stats_file = Path(__file__).parent / 'fixtures/calc/quantiles_expected.npy'
     stats = weighted_stats(stats['probs'], stats['aggs'], stats['weights'])
+
+    print(stats)
+
     stats_expected = np.load(stats_file)
     assert np.allclose(stats, stats_expected)
 

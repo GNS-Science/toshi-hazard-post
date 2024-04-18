@@ -1,16 +1,18 @@
 import logging
 import time
+from typing import TYPE_CHECKING, List, Optional, Sequence
 
-from typing import TYPE_CHECKING, List, Sequence, Optional
-import toshi_hazard_post.version2.calculators as calculators
 import numpy as np
+
+import toshi_hazard_post.version2.calculators as calculators
 from toshi_hazard_post.version2.data import load_realizations, save_aggregations
 
 if TYPE_CHECKING:
     import numpy.typing as npt
-    from toshi_hazard_post.version2.logic_tree import HazardLogicTree, HazardCompositeBranch
-    from toshi_hazard_post.version2.data import ValueStore
+
     from toshi_hazard_post.version2.aggregation_setup import Site
+    from toshi_hazard_post.version2.data import ValueStore
+    from toshi_hazard_post.version2.logic_tree import HazardCompositeBranch, HazardLogicTree
 
 log = logging.getLogger(__name__)
 
@@ -51,7 +53,12 @@ def calc_composite_rates(
         rates: hazard rates for the composite realization D(nlevels,)
     """
     rates = np.array([value_store.get_values(branch) for branch in composite_branch])
-    return np.sum(rates, axis=0)
+
+    # print(rates)
+    summed = np.sum(rates, axis=0)
+    # print()
+    # print(summed)
+    return summed
 
 
 def weighted_stats(
@@ -123,20 +130,29 @@ def calculate_aggs(branch_rates: 'npt.NDArray', weights: 'npt.NDArray', agg_type
 
     Parameters:
         branch_rates: hazard rates for every composite realization of the model with dimensions (branch, IMTL)
-        weights: one dimensional array of weights for composite branches
-        agg_types: the aggregate statistics to be calculated (e.g., "mean", "0.5")
+        weights: one dimensional array of weights for composite branches with dimensions (branch,)
+        agg_types: the aggregate statistics to be calculated (e.g., "mean", "0.5") with dimension (agg_type,)
 
     Returns:
-        hazard: aggregate rates array with dimension (agg_type, IMTL)
+        hazard: aggregate rates array with dimension (IMTL, agg_type)
     """
 
-    nrows = branch_rates.shape[1]
+    log.debug(f"branch_rates with shape {branch_rates.shape}")
+    log.debug(f"weights with shape {weights.shape}")
+    log.debug(f"agg_types {agg_types}")
+
+    try:
+        nrows = branch_rates.shape[1]
+    except Exception:
+        nrows = len(branch_rates)
+
     ncols = len(agg_types)
-    aggs = np.empty((nrows, ncols))
+    aggs = np.empty((nrows, ncols))  # (IMTL, agg_type)
     for i in range(nrows):
         quantiles = weighted_stats(branch_rates[:, i], list(agg_types), sample_weight=weights)
         aggs[i, :] = np.array(quantiles)
 
+    log.debug(f"agg with shape {aggs.shape}")
     return aggs
 
 
@@ -180,6 +196,7 @@ def calc_aggregation(
         log.info("building branch rates . . . ")
         branch_rates = build_branch_rates(logic_tree, value_store, len(levels))
         toc = time.perf_counter()
+        # log.debug(f'branch_rates.shape {}
         log.debug(f'time to build branch rates {toc-tic:.2f} seconds')
 
         tic = time.perf_counter()

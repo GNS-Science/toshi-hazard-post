@@ -1,0 +1,78 @@
+# coding: utf-8
+from toshi_hazard_post.version2.aggregation_config import AggregationConfig
+config = AggregationConfig('demo/hazard_v2.toml')
+config
+help(config)
+import pyarrow as pa
+from toshi_hazard_post.version2.aggregation_config import AggregationConfig
+from toshi_hazard_post.version2.aggregation_calc_arrow import calc_aggregation_arrow
+from toshi_hazard_post.version2.logic_tree import HazardLogicTree
+from toshi_hazard_post.version2.aggregation_setup import get_lts, get_sites
+sites = get_sites(config.locations, config.vs30s)
+sites
+srm_lt, gmcm_lt = get_lts(config)
+srm_lt
+logic_tree = HazardLogicTree(srm_lt, gmcm_lt)
+logic_tree
+help(logic_tree)
+help(logic_tree.component_branches)
+len(logic_tree.component_branches)
+len(list(logic_tree.component_branches))
+list(logic_tree.component_branches)[0]
+list(logic_tree.component_branches)[0].tectonic_region_type
+list(logic_tree.component_branches)[0].source_branch.tectonic_region_types
+list(logic_tree.component_branches)[1].source_branch.tectonic_region_types
+list(logic_tree.component_branches)[2].source_branch.tectonic_region_types
+list(logic_tree.component_branches)[-1].source_branch.tectonic_region_types
+list(logic_tree.component_branches)[12].source_branch.tectonic_region_types
+for cpb in logic_tree.component_branches:
+    print(cpb.source_branch.tectonic_region_types, "|", len(cpb.gmcm_branches), cpb.gmcm_branches[0].tectonic_region_type)
+    
+help
+help()
+for cpb in logic_tree.component_branches:
+    print(cpb.source_branch.tectonic_region_types, "|", len(cpb.gmcm_branches), cpb.gmcm_branches[0].tectonic_region_type)
+    
+len(logic_tree.composite_branches)
+len(list(logic_tree.composite_branches))
+list(logic_tree.composite_branches)[0]
+len(list(logic_tree.composite_branches)[0].branches)
+for cpb in list(logic_tree.composite_branches)[0].branches:
+    print(cpb.source_branch.tectonic_region_types, "|", len(cpb.gmcm_branches), cpb.gmcm_branches[0].tectonic_region_type)
+    
+weight_table = logic_tree.weight_table()
+wt = weight_table.to_pandas()
+wt
+wt[(wt.sources_digest == "af9ec2b004d7 & wt.gmms_digest == "e031e948959c")] 
+wt[(wt.sources_digest == "af9ec2b004d7" & wt.gmms_digest == "e031e948959c")]
+wt[(wt.sources_digest == "af9ec2b004d7") & (wt.gmms_digest == "e031e948959c")]
+wt[(wt.sources_digest == "af9ec2b004d7")]
+wt[(wt.gmms_digest == "e031e948959c")]
+config = AggregationConfig('demo/hazard_v2.toml')
+srm_lt, gmcm_lt = get_lts(config)
+weight_table = logic_tree.weight_table()
+wt = weight_table.to_pandas()
+wt
+wt = weight_table.to_pandas()
+weight_table = logic_tree.weight_table()
+wt = weight_table.to_pandas()
+wt
+logic_tree.weights
+len(logic_tree.weights)
+config = AggregationConfig('demo/hazard_v2.toml')
+srm_lt, gmcm_lt = get_lts(config)
+gmcm_lt
+config = AggregationConfig('demo/hazard_v2.toml')
+srm_lt, gmcm_lt = get_lts(config)
+gmcm_lt
+logic_tree = HazardLogicTree(srm_lt, gmcm_lt)
+len(logic_tree.weights
+
+)
+config = AggregationConfig('demo/hazard_v2.toml')
+srm_lt, gmcm_lt = get_lts(config)
+logic_tree = HazardLogicTree(srm_lt, gmcm_lt)
+len(logic_tree.weights
+
+)
+%save -r inspection_0 1-10000

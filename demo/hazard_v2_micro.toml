@@ -3,13 +3,11 @@ compatibility_key = "A_A"
 hazard_model_id = "DEMO_MODEL"
 
 [logic_trees]
-model_version = "NSHM_v1.0.4"
+# model_version = "NSHM_v1.0.4"
 
 # alternativly, specify a path to logic tree files
-# srm_file = "demo/srm_logic_tree_no_slab.json"
-# srm_file = "demo/srm_logic_tree_micro.json"
-# gmcm_file = "demo/gmcm_logic_tree_medium.json"
-# gmcm_file = "demo/gmcm_logic_tree_small.json"
+srm_file = "demo/srm_logic_tree_micro.json"
+gmcm_file = "demo/gmcm_logic_tree_small.json"
 
 [site]
 vs30s = [275]
@@ -23,6 +21,5 @@ locations = ["-34.500~173.000"]
 
 [calculation]
 #imts = ["PGA", "SA(1.0)"]
-#imts = ["PGA"]
-imts = ["PGA", "SA(0.5)", "SA(1.0)", "SA(2.0)", "SA(5.0)"]
+imts = ["PGA"]
 agg_types = ["mean", "cov", "std", "0.005", "0.01", "0.025"]

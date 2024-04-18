@@ -31,7 +31,7 @@ packages = [
 thp = 'scripts.thp_v2:thp'
 
 [tool.poetry.dependencies]
-python = ">=3.9,<3.13"
+python = ">=3.10,<3.13"
 # boto3 = "^1.24.34"
 # nshm-toshi-client = "^1.0.0"
 # PyYAML = "^6.0"
@@ -42,12 +42,14 @@ toml = "^0.10.2"
 # toshi-hazard-store = "^0.7.5"
 # pandas = "~2.0.3"
 numpy = "^1.26.4"
-nzshm-common = {git = "https://github.com/GNS-Science/nzshm-common-py.git", rev = "36-get_locations"}
 numba = "^0.59.1"
 boto3 = {version = "^1.34.82", optional = true}
 nzshm-model = {git = "https://github.com/GNS-Science/nzshm-model.git", rev = "srm-trt-merge-digest"}
 pyarrow = {version = "^15.0.2", extras = ["pandas"]}
 pandas = "^2.2.2"
+nshm-toshi-client = "^1.0.1"
+duckdb = "^0.10.1"
+nzshm-common = "^0.7.0"
 
 [tool.poetry.group.dev.dependencies]
 black  = { version = "^22.3"}

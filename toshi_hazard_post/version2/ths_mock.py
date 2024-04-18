@@ -1,17 +1,18 @@
 import logging
 import time
-from nzshm_model.branch_registry import identity_digest
-from typing import Generator, List, TYPE_CHECKING, Iterable, Sequence
 from dataclasses import dataclass
-import numpy as np
+from typing import TYPE_CHECKING, Generator, Iterable, List, Sequence
+
 import boto3
-import pyarrow.dataset as ds
+import numpy as np
 import pyarrow.compute as pc
+import pyarrow.dataset as ds
+from nzshm_model.branch_registry import identity_digest
+from nzshm_model.logic_tree import GMCMBranch, SourceBranch
 from pyarrow import fs
 
-from nzshm_model.logic_tree import SourceBranch, GMCMBranch
-from toshi_hazard_post.version2.logic_tree import HazardBranch
-from toshi_hazard_post.version2.local_config import ARROW_FS, ArrowFS, ARROW_DIR
+from toshi_hazard_post.version2.local_config import ARROW_DIR, ARROW_FS, ArrowFS
+from toshi_hazard_post.version2.logic_tree import HazardComponentBranch
 
 if TYPE_CHECKING:
     import numpy.typing as npt
@@ -110,7 +111,7 @@ class mRLZ:
 
 
 def query_realizations(
-    loc: 'CodedLocation', vs30: int, imt: str, branches: Iterable[HazardBranch], compat_key: str
+    loc: 'CodedLocation', vs30: int, imt: str, branches: Iterable[HazardComponentBranch], compat_key: str
 ) -> Generator[mRLZ, None, None]:
 
     session = boto3.session.Session()

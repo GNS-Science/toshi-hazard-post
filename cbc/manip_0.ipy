@@ -1,0 +1,40 @@
+# coding: utf-8
+from toshi_hazard_post.version2.aggregation_config import AggregationConfig
+config = AggregationConfig('demo/hazard_v2.toml')
+import pyarrow as pa
+from toshi_hazard_post.version2.aggregation_config import AggregationConfig
+from toshi_hazard_post.version2.aggregation_calc_arrow import calc_aggregation_arrow
+from toshi_hazard_post.version2.logic_tree import HazardLogicTree
+from toshi_hazard_post.version2.aggregation_setup import get_lts, get_sites
+config = AggregationConfig('demo/hazard_v2.toml')
+srm_lt, gmcm_lt = get_lts(config)
+logic_tree = HazardLogicTree(srm_lt, gmcm_lt)
+sites = get_sites(config.locations, config.vs30s)
+weight_table = logic_tree.weight_table()
+rates_weights = calc_aggregation_arrow(
+                site=sites[0], imt=config.imts[0], agg_types = config.agg_types, weights=weight_table,
+                logic_tree = logic_tree, compatibility_key=config.compat_key, hazard_model_id=config.hazard_model_id
+            )
+rates_weights
+rwt = rates_weights
+rwt.group_by(['sources_digist', 'gmms_digest'])
+rwt.group_by(['sources_digist', 'gmms_digest']).aggregate(('weight', 'sum'))
+rwt.group_by(['sources_digist', 'gmms_digest']).aggregate([('weight', 'sum')])
+rwt.group_by(['sources_digest', 'gmms_digest']).aggregate([('weight', 'sum')])
+rwt.group_by(['sources_digest', 'gmms_digest']).aggregate([('weight', 'sum')]).shape
+rwt.shape
+rwt.group_by(['sources_digest', 'gmms_digest']).aggregate([('weight', 'sum'), ('values', 'sum')])
+rwt.values
+help(rwt)
+rwt.schema
+rwt.column(2)
+help(rwt.column(2))
+vnp = rwt.column(2).to_numpy()
+vnp
+vnp.shape
+vnp[0].shape
+summed = np.sum(vnp, axis=0)
+import numpy as np
+summed = np.sum(vnp, axis=0)
+summed
+summed.shape
