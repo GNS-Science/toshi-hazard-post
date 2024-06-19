@@ -1,6 +1,0 @@
-num_workers = 1
-work_path = 'default work path'
-ths_rlz_local_dir = 'default ths local dir'
-ths_rlz_s3_bucket = 'default ths s3 bucket'
-ths_rlz_aws_region = 'default ths aws region'
-ths_rlz_fs = 'LOCAL'

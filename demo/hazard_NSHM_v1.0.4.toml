@@ -1,0 +1,19 @@
+[general]
+compatibility_key = "NZSHM22-0"
+hazard_model_id = "NSHM_v1.0.4_DEMO_MODEL"
+
+[logic_trees]
+model_version = "NSHM_v1.0.4"
+
+[site]
+vs30s = [275]
+# locations = ["WLG", "SRWG214", "-41.000~174.700", "myfile.csv"]
+locations = ["-34.500~173.000"]
+# locations = [
+#     '-46.100~166.400', '-46.800~167.900',
+#     '-41.800~171.900', '-41.600~172.500'
+# ]
+
+[calculation]
+imts = ["SA(0.2)", "SA(1.5)", "SA(2.0)", "SA(5.0)"]
+agg_types = ["mean", "cov", "std", "0.1", "0.005", "0.01", "0.025"]

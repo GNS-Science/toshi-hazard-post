@@ -1,8 +1,8 @@
 import logging
+import os
 
 import click
 
-import toshi_hazard_post.local_config as local_config
 from toshi_hazard_post.aggregation import run_aggregation
 from toshi_hazard_post.aggregation_args import AggregationArgs
 
@@ -27,7 +27,7 @@ def thp():
 def aggregate(input_file, config_file):
 
     if config_file:
-        local_config.config_override_filepath = config_file
+        os.environ['THP_ENV_FILE'] = str(config_file)
 
     args = AggregationArgs(input_file)
     click.echo("Toshi Hazard Post: hazard curve aggregation")

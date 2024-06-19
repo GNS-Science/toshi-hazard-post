@@ -1,0 +1,19 @@
+[general]
+compatibility_key = "NZSHM22-0"
+hazard_model_id = "MINI_DEMO_MODEL"
+
+[logic_trees]
+# model_version = "NSHM_v1.0.4"
+
+# alternativly, specify a path to logic tree files
+srm_file = "srm_logic_tree_no_slab.json"
+gmcm_file = "gmcm_logic_tree_medium.json"
+
+[site]
+vs30s = [275]
+#locations = ["WLG"]
+locations = ['srg_29', 'srg_55', 'srg_78', 'srg_93', 'srg_120', 'srg_132', 'srg_135', 'srg_142', 'srg_152', 'srg_169', 'srg_194', 'srg_203']
+
+[calculation]
+imts = ["PGA", "SA(0.5)", "SA(1.0)", "SA(2.0)", "SA(5.0)"]
+agg_types = ["mean", "cov", "std", "0.005", "0.01", "0.025"]

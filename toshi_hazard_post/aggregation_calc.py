@@ -1,3 +1,6 @@
+"""
+Primary functions for calculating an aggregation for a single, site, IMT, etc.
+"""
 import logging
 import time
 from dataclasses import dataclass

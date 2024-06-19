@@ -57,11 +57,12 @@ class TestMeanStd(unittest.TestCase):
 
 class TestQuantiles(unittest.TestCase):
     def setUp(self):
-        self._weights_values_file = Path(Path(__file__).parent, 'fixtures/calculators', 'weights_and_values.json')
-
-        w_and_v = json.load(open(self._weights_values_file))
-        self._weights = np.array(w_and_v['weights'])
-        self._values = np.array(w_and_v['values'])
+        weights_filepath = Path(__file__).parent / 'fixtures' / 'calculators' / 'weights.npy'
+        rates_filepath = Path(__file__).parent / 'fixtures' / 'calculators' / 'branch_rates.npy'
+        aggs_expected_filepath = Path(__file__).parent / 'fixtures' / 'calculators' / 'agg_0p2.npy'
+        self.weights = np.load(weights_filepath)
+        self.rates = np.load(rates_filepath)
+        self.aggs_expected = np.load(aggs_expected_filepath)
 
     def test_calculate_quantiles(self):
 
@@ -72,3 +73,14 @@ class TestQuantiles(unittest.TestCase):
         quantiles_expeced = [4]
 
         assert np.allclose(quantiles, quantiles_expeced)
+
+    def test_calculate_quantiles_b(self):
+
+        naggs = 1
+        _, nlevels = self.rates.shape
+        aggs = np.empty((naggs, nlevels))
+        quantiles = [0.2]
+        for i in range(nlevels):
+            aggs[:, i] = weighted_quantiles(self.rates[:, i], self.weights, quantiles)
+
+        np.testing.assert_allclose(aggs, self.aggs_expected, verbose=True)
