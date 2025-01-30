@@ -33,14 +33,14 @@ thp = 'scripts.cli:thp'
 [tool.poetry.dependencies]
 python = ">=3.10,<3.13"
 toml = "^0.10.2"
-numpy = "^1.26.4"
+numpy = ">1"
 numba = "^0.59.1"
-boto3 = {version = "^1.34.82", optional = true}
-pyarrow = {version = "^15.0.2", extras = ["pandas"]}
+boto3 = {version = ">1", optional = true}
+pyarrow = {version = ">15", extras = ["pandas"]}
 nzshm-common = {git = "https://github.com/GNS-Science/nzshm-common-py.git", rev = "pre-release"}
-pandas = "~2.0.3"
-click = "^8.1.7"
-python-dotenv = "^1.0.1"
+pandas = ">2"
+click = ">8"
+python-dotenv = ">1"
 toshi-hazard-store = {git = "https://github.com/GNS-Science/toshi-hazard-store.git", rev = "pre-release"}
 nzshm-model = {git = "https://github.com/GNS-Science/nzshm-model.git", rev = "pre-release"}
 
