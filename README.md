@@ -17,7 +17,7 @@ Seismic hazard from pre-calculated relizations. This application impliments the 
 
 ## Requriements
 
-toshi-hazard-post requires python 3.10 - 3.12. It relies on other GNS-Science NSHM libraries:
+toshi-hazard-post requires python 3.10 - 3.11. It relies on other GNS-Science NSHM libraries:
 
 - nzshm-model: <https://github.com/GNS-Science/nzshm-model>
 - nzshm-common: <https://github.com/GNS-Science/nzshm-common-py>
