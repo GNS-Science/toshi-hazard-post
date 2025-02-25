@@ -48,7 +48,6 @@ pyarrow = {version = "^15.0.2", extras = ["pandas"]}
 black = "^25.1.0"
 isort = "^6.0.0"
 flake8 = "^7.1.2"
-flake8-docstrings = "^1.7.0"
 pytest = "^8.3.4"
 pytest-cov = "^6.0.0"
 twine = "^6.1.0"
