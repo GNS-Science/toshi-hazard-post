@@ -1,6 +1,7 @@
 """
 Functions for loading realizations and saving aggregations
 """
+
 import logging
 import time
 from typing import TYPE_CHECKING, List, Optional, Tuple
