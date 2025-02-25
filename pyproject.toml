@@ -33,42 +33,42 @@ thp = 'scripts.cli:thp'
 [tool.poetry.dependencies]
 python = ">=3.10,<3.12"
 toml = "^0.10.2"
-numpy = ">1"
-numba = "^0.59.1"
-boto3 = {version = ">1", optional = true}
-pyarrow = {version = ">15", extras = ["pandas"]}
 nzshm-common = {git = "https://github.com/GNS-Science/nzshm-common-py.git", rev = "pre-release"}
-pandas = ">2"
-click = ">8"
-python-dotenv = ">1"
 toshi-hazard-store = {git = "https://github.com/GNS-Science/toshi-hazard-store.git", rev = "pre-release"}
 nzshm-model = {git = "https://github.com/GNS-Science/nzshm-model.git", rev = "pre-release"}
+numpy = "^1.26.4"
+pandas = "^2.0.3"
+numba = "^0.61.0"
+click = "^8.1.8"
+python-dotenv = "^1.0.1"
+boto3 = {version = "^1.37.0", optional = true}
+pyarrow = {version = "^15.0.2", extras = ["pandas"]}
 
 [tool.poetry.group.dev.dependencies]
-black  = ">22"
-isort  = ">5"
-flake8  = ">=3.8"
-flake8-docstrings = ">1.6"
-pytest = ">6"
-pytest-cov  = ">2"
-twine  = ">3"
-bump2version = ">=1.0.1"
-types-toml = "^0.10.8"
-types-requests = ">=2.28.5"
-tox = ">4.6.4"
-mypy = ">1.8.0"
+black = "^25.1.0"
+isort = "^6.0.0"
+flake8 = "^7.1.2"
+flake8-docstrings = "^1.7.0"
+pytest = "^8.3.4"
+pytest-cov = "^6.0.0"
+twine = "^6.1.0"
+bump2version = "^1.0.1"
+types-toml = "^0.10.8.20240310"
+types-requests = "^2.32.0.20241016"
+tox = "^4.24.1"
+mypy = "^1.15.0"
+
 
 [tool.poetry.group.doc.dependencies]
-mkdocs = ">=1.5.3"
-mkdocs-include-markdown-plugin = ">=6.0.4"
-mkdocs-material = ">=9.5.14"
-mkdocs-material-extensions = ">=1.3.1"
-mkdocs-autorefs = ">=1.0.1"
-mkdocs-pymdownx-material-extras = ">=2.5.6"
-pymdown-extensions = ">=10.7.1"
-mkdocstrings = ">=0.24.3"
-mkdocstrings-python = ">=1.9.2"
-
+mkdocs = "^1.6.1"
+mkdocs-include-markdown-plugin = "^7.1.4"
+mkdocs-material = "^9.6.5"
+mkdocs-material-extensions = "^1.3.1"
+mkdocs-autorefs = "^1.4.0"
+mkdocs-pymdownx-material-extras = "^2.7"
+pymdown-extensions = "^10.14.3"
+mkdocstrings = "^0.28.2"
+mkdocstrings-python = "^1.16.2"
 
 [tool.poetry.extras]
 aws = ["boto3"]
