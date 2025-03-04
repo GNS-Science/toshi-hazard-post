@@ -1,14 +1,14 @@
 import csv
 from collections import namedtuple
 from pathlib import Path
-from typing import Union
+from typing import Union, Optional
 
 import toml
 from nzshm_model import all_model_versions, get_model_version
 from nzshm_model.logic_tree import GMCMLogicTree, SourceLogicTree
 
 from toshi_hazard_post.ths_mock import query_compatibility
-
+from toshi_hazard_store.model.constraints import IntensityMeasureTypeEnum, AggregationEnum
 
 class AggregationArgs:
     def __init__(self, input_filepath: Union[str, Path]) -> None:
@@ -16,9 +16,8 @@ class AggregationArgs:
         self._config = toml.load(self.filepath)
         self._validate_vs30s()
         self._validate_list('site', 'locations', str)
-        self._validate_list('calculation', 'imts', str)
-        self._validate_list('calculation', 'agg_types', str)
-        self._validate_agg_types()
+        
+        #  self._validate_agg_types() 
         self._validate_compatibility()
         self._set_logic_trees()
 
@@ -26,9 +25,12 @@ class AggregationArgs:
         self.vs30s = self._config['site'].get('vs30s')
         self.compat_key = self._config['general']['compatibility_key']
         self.hazard_model_id = self._config['general']['hazard_model_id']
-        self.imts = self._config['calculation']['imts']
-        self.agg_types = self._config['calculation']['agg_types']
-
+        
+        self._validate_list('calculation', 'imts', str, IntensityMeasureTypeEnum)
+        self._validate_list('calculation', 'agg_types', str, AggregationEnum)
+        self.imts = self._config['calculation'].get('imts', list(v.value for v in IntensityMeasureTypeEnum))
+        self.agg_types = self._config['calculation'].get('agg_types', list(v.value for v in AggregationEnum))
+       
     def _validate_compatibility(self) -> None:
         res = list(query_compatibility(self._config['general']['compatibility_key']))
         if not res:
@@ -58,7 +60,16 @@ class AggregationArgs:
                             "fractile aggregate types must be between 0 and 1 exclusive: {}".format(agg_type)
                         )
 
-    def _validate_list(self, table, name, element_type) -> None:
+    def _validate_list(self, table, name, element_type, constraint_enum: Optional['Enum'] = None ) -> None:
+
+        if constraint_enum:
+            items = self._config[table].get(name)
+            if not items:
+                return # empty list is OK for constraints
+            for item in items:
+                assert constraint_enum(item) # ensure each value is a valid enum value
+            return
+
         if not self._config[table].get(name):
             raise KeyError("must specify [{}][{}]".format(table, name))
         if not isinstance(self._config[table][name], list):
