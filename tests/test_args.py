@@ -66,9 +66,9 @@ config_verror1 = get_config()
 del config_verror1['site']['vs30s']
 config_verror1['site']['locations'] = [str(Path(__file__).parent / 'fixtures/sites_vs30s_str.csv')]
 
-# must specifiy imts
-config_keyerror5 = get_config()
-del config_keyerror5['calculation']['imts']
+# imts is now optional
+# config_keyerror5 = get_config()
+# del config_keyerror5['calculation']['imts']
 
 # must specifiy locations
 config_keyerror6 = get_config()
@@ -106,7 +106,7 @@ def test_logic_tree_valid(mock_gmcm, mock_srm, mock_load, config):
         (config_keyerror2, KeyError),
         (config_keyerror3, KeyError),
         (config_keyerror4, KeyError),
-        (config_keyerror5, KeyError),
+        # (config_keyerror5, KeyError),
         (config_keyerror6, KeyError),
         (config_fnferror1, FileNotFoundError),
         (config_rterror1, RuntimeError),
