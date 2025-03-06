@@ -1,6 +1,6 @@
 """
 Package to set compute configuration. Configuration parameters can be set by default .env file, user specified file,
-and/or environment variables in that order of increasing precidence.
+or environment variable, with  that order of  precedence.``
 
 Environment varaible parameters are uppercase, config file is case insensitive.
 
