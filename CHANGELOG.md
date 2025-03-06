@@ -7,6 +7,7 @@
   * upstream nshm libraries updated to latest pypi releases.
   * minor test fixes
   * cli logging level is now INFO.
+  
 ## [0.4.0] - 2024-06-06
 
 ### Added

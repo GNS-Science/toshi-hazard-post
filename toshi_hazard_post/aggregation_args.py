@@ -17,8 +17,6 @@ class AggregationArgs:
         self._config = toml.load(self.filepath)
         self._validate_vs30s()
         self._validate_list('site', 'locations', str)
-
-        #  self._validate_agg_types()
         self._validate_compatibility()
         self._set_logic_trees()
 

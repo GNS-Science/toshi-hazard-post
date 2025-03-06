@@ -23,7 +23,7 @@ def test_end_to_end(load_mock, save_mock, monkeypatch):
     def mock_config():
         return dict(NUM_WORKERS=1)
 
-    # Note the mocking must be done in the module that the mcok is called in
+    # Note that mocking must be done in the module where the mocked object is called
     monkeypatch.setattr(toshi_hazard_post.aggregation, 'get_config', mock_config)
     load_mock.return_value = pd.read_parquet(parquet_filepath)
     agg_args = AggregationArgs(args_filepath)
