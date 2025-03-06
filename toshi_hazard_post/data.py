@@ -1,3 +1,7 @@
+"""
+Functions for loading realizations and saving aggregations
+"""
+
 import logging
 import time
 from typing import TYPE_CHECKING, List, Optional, Tuple
@@ -7,7 +11,7 @@ import pyarrow as pa
 import pyarrow.compute as pc
 import pyarrow.dataset as ds
 from pyarrow import fs
-from toshi_hazard_store.model.revision_4 import hazard_aggregate_curve, pyarrow_dataset
+from toshi_hazard_store.model.revision_4 import hazard_aggregate_curve, pyarrow_aggr_dataset
 
 from toshi_hazard_post.local_config import ArrowFS, get_config
 
@@ -59,7 +63,7 @@ def save_aggregations(
                 agg=agg,
             ).set_location(location)
 
-    pyarrow_dataset.append_models_to_dataset(generate_models(), root, filesystem=filesystem)
+    pyarrow_aggr_dataset.append_models_to_dataset(generate_models(), root, filesystem=filesystem)
     # write_aggs_to_ths(hazard, location, vs30, imt, agg_types, hazard_model_id)
 
 
@@ -83,21 +87,27 @@ def get_s3_fs(region, bucket) -> Tuple[fs.FileSystem, str]:
 def get_rlz_filesystem() -> Tuple[fs.FileSystem, str]:
     config = get_config()
     return get_arrow_filesystem(
-        config.ths_rlz_fs, config.ths_rlz_aws_region, config.ths_rlz_local_dir, config.ths_rlz_s3_bucket
+        config['RLZ_FS'],
+        config['RLZ_LOCAL_DIR'],
+        config['RLZ_AWS_REGION'],
+        config['RLZ_S3_BUCKET'],
     )
 
 
 def get_agg_filesystem() -> Tuple[fs.FileSystem, str]:
     config = get_config()
     return get_arrow_filesystem(
-        config.ths_agg_fs, config.ths_agg_aws_region, config.ths_agg_local_dir, config.ths_agg_s3_bucket
+        config['AGG_FS'],
+        config['AGG_LOCAL_DIR'],
+        config['AGG_AWS_REGION'],
+        config['AGG_S3_BUCKET'],
     )
 
 
 def get_arrow_filesystem(
     fs_type: ArrowFS,
-    aws_region: Optional[str] = None,
     local_dir: Optional[str] = None,
+    aws_region: Optional[str] = None,
     s3_bucket: Optional[str] = None,
 ) -> Tuple[fs.FileSystem, str]:
 
@@ -162,7 +172,7 @@ def load_realizations(
         compatibility_key: the compatibility key used to lookup the correct realizations in the database
 
     Returns:
-        values: the component realizations rates (not probabilities)
+        values: the component realizations
     """
     dataset = get_realizations_dataset()
 
@@ -187,7 +197,9 @@ def load_realizations(
     rlz_table = arrow_scanner.to_table()
     t2 = time.monotonic()
     if len(rlz_table) == 0:
-        raise Exception(f"no realizations were found in the database for {location=}, {imt=}, {vs30=}")
+        raise Exception(
+            f"no realizations were found in the database for {location=}, {imt=}, {vs30=}, {compatibility_key=}"
+        )
 
     log.info("load scanner:%0.6f, to_arrow %0.6fs" % (t1 - t0, t2 - t1))
     log.info("RSS: {}MB".format(pa.total_allocated_bytes() >> 20))

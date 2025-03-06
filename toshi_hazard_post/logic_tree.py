@@ -1,3 +1,7 @@
+"""
+Classes for the combined SRM + GMCM logic trees used to define a seismic hazard model.
+"""
+
 import copy
 import logging
 from dataclasses import dataclass, field

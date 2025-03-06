@@ -78,7 +78,7 @@ def cov(mean: 'npt.NDArray', std: 'npt.NDArray') -> 'npt.NDArray':
 def weighted_quantiles(
     values: 'npt.NDArray', weights: 'npt.NDArray', quantiles: Union[List[float], 'npt.NDArray']
 ) -> 'npt.NDArray':
-    """Calculate weighed quantiles of array
+    """Calculate weighted quantiles of array
 
     Parameters:
         values: values of data
@@ -86,10 +86,10 @@ def weighted_quantiles(
         quantiles: quantiles to be found. Values should be in [0,1]
 
     Returns:
-        weighed_quantiles: weighed quantiles
+        weighted quantiles
     """
 
-    sorter = np.argsort(values)
+    sorter = np.argsort(values, kind='stable')
     values = values[sorter]
     weights = weights[sorter]
 

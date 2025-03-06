@@ -1,3 +1,7 @@
+"""
+Module for coordinating and launching aggregation jobs.
+"""
+
 import logging
 import sys
 import time
@@ -53,8 +57,7 @@ def run_aggregation(args: AggregationArgs) -> None:
     Parameters:
         config: the aggregation configuration
     """
-    config = get_config()
-    num_workers = config.num_workers
+    num_workers = get_config()['NUM_WORKERS']
 
     time0 = time.perf_counter()
     # get the sites
