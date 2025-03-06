@@ -65,6 +65,7 @@ lat,lon,vs30
 ```
 
 ### `[calculation]`
+These two settings may be omitted, in which case the calc will be performed for all members of the corresponding Enumeration type.
 
 - `imts`: list of strings of intensity measure types to calculate (following OpenQuake IMT naming convention)
 - `agg_types`: list of strings of the statistical aggregates to calculate. Options are:
@@ -72,7 +73,6 @@ lat,lon,vs30
     - `std`: weighted standard deviation
     - `cov`: weighted coeficint of variation [Meletti et al., 2021](https://doi.org/10.4401/ag-8579)
     - fractile specified by the string representation of a floating point number between 0 and 1
-
 
 ### Manipulating calculation arguments programmatically
 
