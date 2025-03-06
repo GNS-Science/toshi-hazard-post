@@ -15,7 +15,7 @@ Seismic hazard from pre-calculated relizations. This application impliments the 
 * PyPI: <https://pypi.org/project/toshi-hazard-post/>
 * Free software: AGPL-3.0
 
-## Requriements
+## Requirements
 
 toshi-hazard-post requires python 3.10 - 3.11. It relies on other GNS-Science NSHM libraries:
 
