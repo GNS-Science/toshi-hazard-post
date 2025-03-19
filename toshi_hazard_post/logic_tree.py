@@ -3,11 +3,10 @@ Classes for the combined SRM + GMCM logic trees used to define a seismic hazard 
 """
 
 import copy
+import math
 import logging
 from dataclasses import dataclass, field
-from functools import reduce
 from itertools import chain, product
-from operator import mul
 from typing import TYPE_CHECKING, List, Tuple
 
 import numpy as np
@@ -22,8 +21,6 @@ log = logging.getLogger(__name__)
 registry = nzshm_model.branch_registry.Registry()
 
 
-# this is a dataclass so that we can use asdict for the __repr__()
-@dataclass
 class HazardComponentBranch:
     """
     A component branch of the combined (SRM + GMCM) logic tree comprised of an srm branch and a gmcm branch. The
@@ -34,14 +31,9 @@ class HazardComponentBranch:
         gmcm_branchs: the ground motion models
     """
 
-    source_branch: 'SourceBranch'
-    gmcm_branches: Tuple['GMCMBranch']
-    # weight: float = field(init=False)  # TODO: this is not needed
-    hash_digest: str = field(init=False)
-
-    def __post_init__(self):
-        # self.weight = reduce(mul, [self.source_branch.weight] + [b.weight for b in self.gmcm_branches])
-        import math
+    def __init__(self, source_branch: 'SourceBranch', gmcm_branches: Tuple['GMCMBranch']):
+        self.source_branch = source_branch
+        self.gmcm_branches = gmcm_branches
         self.weight = math.prod([self.source_branch.weight] + [b.weight for b in self.gmcm_branches])
         self.gmcm_branches = tuple(self.gmcm_branches)
         self.hash_digest = self.source_hash_digest + self.gmcm_hash_digest
@@ -66,8 +58,6 @@ class HazardComponentBranch:
     def source_hash_digest(self) -> str:
         return registry.source_registry.get_by_identity(self.source_branch.registry_identity).hash_digest
 
-# TODO: don't need dataclass
-@dataclass
 class HazardCompositeBranch:
     """
     A composite branch of the combined (SRM + GMCM) logic tree.
@@ -80,15 +70,9 @@ class HazardCompositeBranch:
         branches: the source-ground motion pairs that comprise the HazardCompositeBranch
     """
 
-    branches: List[HazardComponentBranch]
-    source_weight: float
-    weight: float = field(init=False)
+    def __init__(self, branches: List[HazardComponentBranch], source_weight: float):
+        self.branches = branches
 
-    def __post_init__(self) -> None:
-        # self.weight = reduce(mul, [branch.weight for branch in self.branches])
-        import math
-
-        # source_weights = [branch.source_branch.weight for branch in self.branches]
         # to avoid double counting gmcm branches when calculating the weight we find the unique gmcm branches
         # since GMCMBranch objects are not hashable, we cannot use set()
         gsims = []
@@ -100,7 +84,7 @@ class HazardCompositeBranch:
             if gsim not in gsims_unique:
                 gsims_unique.append(gsim)
         gsim_weights = [gsim.weight for gsim in gsims_unique]
-        self.weight = math.prod(gsim_weights) * self.source_weight
+        self.weight = math.prod(gsim_weights) * source_weight
 
     def __iter__(self) -> 'HazardCompositeBranch':
         self.__counter = 0
