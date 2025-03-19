@@ -31,7 +31,7 @@ class HazardComponentBranch:
 
     Parameters:
         source_branch: the source
-        gmcm_branch: the ground motion model
+        gmcm_branchs: the ground motion models
     """
 
     source_branch: 'SourceBranch'
@@ -40,7 +40,9 @@ class HazardComponentBranch:
     hash_digest: str = field(init=False)
 
     def __post_init__(self):
-        self.weight = reduce(mul, [self.source_branch.weight] + [b.weight for b in self.gmcm_branches])
+        # self.weight = reduce(mul, [self.source_branch.weight] + [b.weight for b in self.gmcm_branches])
+        import math
+        self.weight = math.prod([self.source_branch.weight] + [b.weight for b in self.gmcm_branches])
         self.gmcm_branches = tuple(self.gmcm_branches)
         self.hash_digest = self.source_hash_digest + self.gmcm_hash_digest
 
@@ -81,7 +83,22 @@ class HazardCompositeBranch:
     weight: float = field(init=False)
 
     def __post_init__(self) -> None:
-        self.weight = reduce(mul, [branch.weight for branch in self.branches])
+        # self.weight = reduce(mul, [branch.weight for branch in self.branches])
+        import math
+
+        source_weights = [branch.source_branch.weight for branch in self.branches]
+        # to avoid double counting gmcm branches when calculating the weight we find the unique gmcm branches
+        # since GMCMBranch objects are not hashable, we cannot use set()
+        gsims = []
+        for branch in self.branches:
+            for gsim in branch.gmcm_branches:
+                gsims.append(gsim)
+        gsims_unique = []
+        for gsim in gsims:
+            if gsim not in gsims_unique:
+                gsims_unique.append(gsim)
+        gsim_weights = [gsim.weight for gsim in gsims_unique]
+        self.weight = math.prod(source_weights + gsim_weights)
 
     def __iter__(self) -> 'HazardCompositeBranch':
         self.__counter = 0
