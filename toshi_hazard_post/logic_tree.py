@@ -36,7 +36,7 @@ class HazardComponentBranch:
 
     source_branch: 'SourceBranch'
     gmcm_branches: Tuple['GMCMBranch']
-    weight: float = field(init=False)
+    # weight: float = field(init=False)  # TODO: this is not needed
     hash_digest: str = field(init=False)
 
     def __post_init__(self):
@@ -58,14 +58,15 @@ class HazardComponentBranch:
 
     @property
     def gmcm_hash_digest(self) -> str:
-        assert len(self.gmcm_branches) == 1
+        if len(self.gmcm_branches) != 1:
+            raise NotImplementedError("multiple gmcm branches for a component branch is not implimented")
         return registry.gmm_registry.get_by_identity(self.gmcm_branches[0].registry_identity).hash_digest
 
     @property
     def source_hash_digest(self) -> str:
         return registry.source_registry.get_by_identity(self.source_branch.registry_identity).hash_digest
 
-
+# TODO: don't need dataclass
 @dataclass
 class HazardCompositeBranch:
     """
@@ -79,14 +80,15 @@ class HazardCompositeBranch:
         branches: the source-ground motion pairs that comprise the HazardCompositeBranch
     """
 
-    branches: List[HazardComponentBranch] = field(default_factory=list)
+    branches: List[HazardComponentBranch]
+    source_weight: float
     weight: float = field(init=False)
 
     def __post_init__(self) -> None:
         # self.weight = reduce(mul, [branch.weight for branch in self.branches])
         import math
 
-        source_weights = [branch.source_branch.weight for branch in self.branches]
+        # source_weights = [branch.source_branch.weight for branch in self.branches]
         # to avoid double counting gmcm branches when calculating the weight we find the unique gmcm branches
         # since GMCMBranch objects are not hashable, we cannot use set()
         gsims = []
@@ -98,7 +100,7 @@ class HazardCompositeBranch:
             if gsim not in gsims_unique:
                 gsims_unique.append(gsim)
         gsim_weights = [gsim.weight for gsim in gsims_unique]
-        self.weight = math.prod(source_weights + gsim_weights)
+        self.weight = math.prod(gsim_weights) * self.source_weight
 
     def __iter__(self) -> 'HazardCompositeBranch':
         self.__counter = 0
@@ -200,7 +202,7 @@ class HazardLogicTree:
                 trts = srm_branch.tectonic_region_types
                 gmcm_branches = tuple(branch for branch in gmcm_composite_branch if branch.tectonic_region_type in trts)
                 hbranches.append(HazardComponentBranch(source_branch=srm_branch, gmcm_branches=gmcm_branches))
-            self._composite_branches.append(HazardCompositeBranch(hbranches))
+            self._composite_branches.append(HazardCompositeBranch(hbranches, source_weight=srm_composite_branch.weight))
 
     def _generate_component_branches(self) -> None:
         self._component_branches = []
