@@ -1,14 +1,14 @@
 [general]
-compatibility_key = "A_A"
+compatibility_key = "NZSHM22-0"
 hazard_model_id = "MINI_DEMO_MODEL"
 
 [logic_trees]
-srm_file = "srm_logic_tree_no_slab.json"
-gmcm_file = "gmcm_logic_tree_medium.json"
+srm_file = "srm_logic_tree_small.json"
+gmcm_file = "gmcm_logic_tree_complete.json"
 
 [site]
 vs30s = [275]
-locations = ["-34.500~173.000"]
+locations = ["WLG"]
 
 [calculation]
 imts = ["PGA"]
