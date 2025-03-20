@@ -3,9 +3,8 @@ Classes for the combined SRM + GMCM logic trees used to define a seismic hazard 
 """
 
 import copy
-import math
 import logging
-from dataclasses import dataclass, field
+import math
 from itertools import chain, product
 from typing import TYPE_CHECKING, List, Tuple
 
@@ -57,6 +56,7 @@ class HazardComponentBranch:
     @property
     def source_hash_digest(self) -> str:
         return registry.source_registry.get_by_identity(self.source_branch.registry_identity).hash_digest
+
 
 class HazardCompositeBranch:
     """

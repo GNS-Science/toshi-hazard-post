@@ -1,6 +1,5 @@
 import math
 from pathlib import Path
-import math
 
 import pytest
 from nzshm_model.logic_tree import GMCMLogicTree, SourceLogicTree
@@ -58,6 +57,7 @@ def test_logic_tree_branches(source_logic_tree, gmcm_logic_tree):
     hazard_logic_tree = HazardLogicTree(source_logic_tree, gmcm_logic_tree)
     assert len(list(hazard_logic_tree.component_branches)) == 36 * 3 + 9 * 2 + 3 * 2 + 1 * 2
     assert len(list(hazard_logic_tree.composite_branches)) == 36 * 9 * 3 * 3 * 2 * 2
+
 
 def test_weights_nocorrelations(source_logic_tree, gmcm_logic_tree):
 
