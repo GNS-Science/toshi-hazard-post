@@ -238,11 +238,11 @@ def calc_aggregation(task_args: AggTaskArgs, shared_args: AggSharedArgs, worker_
     time6 = time.perf_counter()
     log.debug('worker %s: time to calculate aggs %0.2f seconds' % (worker_name, time6 - time5))
 
+    probs = calculators.rate_to_prob(hazard, 1.0)
     if shared_args.skip_save:
         log.info("worker %s SKIPPING SAVE . . . " % worker_name)
     else:
         log.info("worker %s saving result . . . " % worker_name)
-        probs = calculators.rate_to_prob(hazard, 1.0)
         save_aggregations(probs, location, vs30, imt, agg_types, hazard_model_id, compatibility_key)
     time7 = time.perf_counter()
     log.info(
