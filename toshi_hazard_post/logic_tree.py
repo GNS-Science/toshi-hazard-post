@@ -183,6 +183,9 @@ class HazardLogicTree:
                 trts = srm_branch.tectonic_region_types
                 gmcm_branches = tuple(branch for branch in gmcm_composite_branch if branch.tectonic_region_type in trts)
                 hbranches.append(HazardComponentBranch(source_branch=srm_branch, gmcm_branches=gmcm_branches))
+
+            # to use the correct weight for correlated source branches we
+            # must use the source branch weight which is correctly set
             self._composite_branches.append(HazardCompositeBranch(hbranches, source_weight=srm_composite_branch.weight))
 
     def _generate_component_branches(self) -> None:
