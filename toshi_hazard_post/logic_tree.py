@@ -78,12 +78,9 @@ class HazardCompositeBranch:
         gsims = []
         for branch in self.branches:
             for gsim in branch.gmcm_branches:
-                gsims.append(gsim)
-        gsims_unique = []
-        for gsim in gsims:
-            if gsim not in gsims_unique:
-                gsims_unique.append(gsim)
-        gsim_weights = [gsim.weight for gsim in gsims_unique]
+                if gsim not in gsims:
+                    gsims.append(gsim)
+        gsim_weights = [gsim.weight for gsim in gsims]
         self.weight = math.prod(gsim_weights) * source_weight
 
     def __iter__(self) -> 'HazardCompositeBranch':
