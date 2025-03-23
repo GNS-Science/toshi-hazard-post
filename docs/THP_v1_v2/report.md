@@ -1,5 +1,15 @@
 # toshi-hazard-post testing
 Difference between NZ NSHM 2022 hazard curves as published and calculated using new toshi-hazard-post on 21/03/2025 (commit hash d2b29ac). Difference curves are the absolute value of the difference in probability. Relative difference curves are abs val difference divided by the published curves. Location srg_120 is the SRWG Masterton site.
+
+The hazard curve plots contain both the published hazard curves (blue) and the re-calculated curves (orange); however, they are so close that one cannot see a difference at the y-scale used. The y-scales for the difference plots are different for each plot to show the full dynamic range; this, however, emphasizes small differences between the curves.
+
+The largest absolute difference between hazard curves (3.15e-8) is for the Dunedin site (DUD) at SA(1.0) and 95th percentile curve which equates to a relative difference of 1.64e-5 at 1.9e-3 aPoE.
+
+The largest relative difference (1.13e-03) is for the Dunedin site (DUD) at PGA and 10th percentile. The absolute difference at this point is only 5.05e-11 due to the difference occurring at a low aPoE of 4.47e-8
+
+These errors are deemed to be acceptably small as they are materially insignificant for any hazard application.
+
+
 ## srg_120
 ![hcurve-location-imt](figs/v1v2-hcurve-srg_120-PGA.png)
 
