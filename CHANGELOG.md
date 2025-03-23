@@ -10,8 +10,6 @@
   * update toshi-hazard-store to 0.9.1 pypi release.
   * update pyarrow to allow all versions >=15.
   
-## [0.5.0] - ...
-
 ### Fixed
  - Composite branch weight bug
 
