@@ -65,7 +65,7 @@ lat,lon,vs30
 ```
 
 ### `[calculation]`
-These two settings may be omitted, in which case the calc will be performed for all members of the corresponding Enumeration type.
+These two settings may be omitted, in which case the calc will be performed for all members of the corresponding Enumeration type (see [toshi_hazard_store/model/constraints.py](https://github.com/GNS-Science/toshi-hazard-store/blob/edc80e444168ae7499d0d1c6636edbc91344ef84/toshi_hazard_store/model/constraints.py)).
 
 - `imts`: list of strings of intensity measure types to calculate (following OpenQuake IMT naming convention)
 - `agg_types`: list of strings of the statistical aggregates to calculate. Options are:
