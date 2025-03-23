@@ -27,7 +27,7 @@ class HazardComponentBranch:
 
     Parameters:
         source_branch: the source
-        gmcm_branchs: the ground motion models
+        gmcm_branches: the ground motion models
     """
 
     def __init__(self, source_branch: 'SourceBranch', gmcm_branches: Tuple['GMCMBranch']):
