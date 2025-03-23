@@ -29,6 +29,10 @@ config3 = get_config()
 del config3['site']['vs30s']
 config3['site']['locations'] = [str(Path(__file__).parent / 'fixtures/sites_vs30s.csv')]
 
+# imts is optional
+config4 = get_config()
+del config4['calculation']['imts']
+
 # if specifying a model version, it must exist
 config_keyerror1 = get_config()
 config_keyerror1['logic_trees']['model_version'] = 'NOT A MODEL VERSION'
@@ -66,9 +70,9 @@ config_verror1 = get_config()
 del config_verror1['site']['vs30s']
 config_verror1['site']['locations'] = [str(Path(__file__).parent / 'fixtures/sites_vs30s_str.csv')]
 
-# must specifiy imts
-config_keyerror5 = get_config()
-del config_keyerror5['calculation']['imts']
+# imts is now optional
+# config_keyerror5 = get_config()
+# del config_keyerror5['calculation']['imts']
 
 # must specifiy locations
 config_keyerror6 = get_config()
@@ -90,7 +94,7 @@ config_verror5 = get_config()
 config_verror5['general']['compatibility_key'] = "Z"
 
 
-@pytest.mark.parametrize("config", [config1, config2, config3])
+@pytest.mark.parametrize("config", [config1, config2, config3, config4])
 @mock.patch('toshi_hazard_post.aggregation_args.toml.load')
 @mock.patch('toshi_hazard_post.aggregation_args.SourceLogicTree.from_json')
 @mock.patch('toshi_hazard_post.aggregation_args.GMCMLogicTree.from_json')
@@ -106,7 +110,7 @@ def test_logic_tree_valid(mock_gmcm, mock_srm, mock_load, config):
         (config_keyerror2, KeyError),
         (config_keyerror3, KeyError),
         (config_keyerror4, KeyError),
-        (config_keyerror5, KeyError),
+        # (config_keyerror5, KeyError),
         (config_keyerror6, KeyError),
         (config_fnferror1, FileNotFoundError),
         (config_rterror1, RuntimeError),

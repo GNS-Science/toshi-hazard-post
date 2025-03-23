@@ -23,9 +23,13 @@ def test_end_to_end(load_mock, save_mock, monkeypatch):
     def mock_config():
         return dict(NUM_WORKERS=1)
 
-    monkeypatch.setattr(toshi_hazard_post.local_config, 'get_config', mock_config)
+    # Note that mocking must be done in the module where the mocked object is called
+    monkeypatch.setattr(toshi_hazard_post.aggregation, 'get_config', mock_config)
     load_mock.return_value = pd.read_parquet(parquet_filepath)
     agg_args = AggregationArgs(args_filepath)
+
+    print(agg_args)
+
     run_aggregation(agg_args)
     aggs = save_mock.mock_calls[0].args[0]
 
