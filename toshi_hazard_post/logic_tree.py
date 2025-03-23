@@ -50,7 +50,7 @@ class HazardComponentBranch:
     @property
     def gmcm_hash_digest(self) -> str:
         if len(self.gmcm_branches) != 1:
-            raise NotImplementedError("multiple gmcm branches for a component branch is not implimented")
+            raise NotImplementedError("multiple gmcm branches for a component branch is not implemented")
         return registry.gmm_registry.get_by_identity(self.gmcm_branches[0].registry_identity).hash_digest
 
     @property
