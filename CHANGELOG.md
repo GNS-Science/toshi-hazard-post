@@ -1,12 +1,14 @@
 # Changelog
 
-## [0.5.0] - 2025-03-06
+## [0.5.0] - 2025-03-24
 
 ### Changed
   * calculation.imts and .agg_types settings are now optional.
   * upstream nshm libraries updated to latest pypi releases.
   * minor test fixes
   * cli logging level is now INFO.
+  * update toshi-hazard-store to 0.9.1 pypi release.
+  * update pyarrow to allow all versions >=15.
   
 ## [0.4.0] - 2024-06-06
 
