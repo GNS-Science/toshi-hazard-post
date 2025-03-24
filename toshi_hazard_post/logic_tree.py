@@ -4,10 +4,8 @@ Classes for the combined SRM + GMCM logic trees used to define a seismic hazard 
 
 import copy
 import logging
-from dataclasses import dataclass, field
-from functools import reduce
+import math
 from itertools import chain, product
-from operator import mul
 from typing import TYPE_CHECKING, List, Tuple
 
 import numpy as np
@@ -22,8 +20,6 @@ log = logging.getLogger(__name__)
 registry = nzshm_model.branch_registry.Registry()
 
 
-# this is a dataclass so that we can use asdict for the __repr__()
-@dataclass
 class HazardComponentBranch:
     """
     A component branch of the combined (SRM + GMCM) logic tree comprised of an srm branch and a gmcm branch. The
@@ -31,16 +27,13 @@ class HazardComponentBranch:
 
     Parameters:
         source_branch: the source
-        gmcm_branch: the ground motion model
+        gmcm_branches: the ground motion models
     """
 
-    source_branch: 'SourceBranch'
-    gmcm_branches: Tuple['GMCMBranch']
-    weight: float = field(init=False)
-    hash_digest: str = field(init=False)
-
-    def __post_init__(self):
-        self.weight = reduce(mul, [self.source_branch.weight] + [b.weight for b in self.gmcm_branches])
+    def __init__(self, source_branch: 'SourceBranch', gmcm_branches: Tuple['GMCMBranch']):
+        self.source_branch = source_branch
+        self.gmcm_branches = gmcm_branches
+        self.weight = math.prod([self.source_branch.weight] + [b.weight for b in self.gmcm_branches])
         self.gmcm_branches = tuple(self.gmcm_branches)
         self.hash_digest = self.source_hash_digest + self.gmcm_hash_digest
 
@@ -56,7 +49,8 @@ class HazardComponentBranch:
 
     @property
     def gmcm_hash_digest(self) -> str:
-        assert len(self.gmcm_branches) == 1
+        if len(self.gmcm_branches) != 1:
+            raise NotImplementedError("multiple gmcm branches for a component branch is not implemented")
         return registry.gmm_registry.get_by_identity(self.gmcm_branches[0].registry_identity).hash_digest
 
     @property
@@ -64,7 +58,6 @@ class HazardComponentBranch:
         return registry.source_registry.get_by_identity(self.source_branch.registry_identity).hash_digest
 
 
-@dataclass
 class HazardCompositeBranch:
     """
     A composite branch of the combined (SRM + GMCM) logic tree.
@@ -77,11 +70,18 @@ class HazardCompositeBranch:
         branches: the source-ground motion pairs that comprise the HazardCompositeBranch
     """
 
-    branches: List[HazardComponentBranch] = field(default_factory=list)
-    weight: float = field(init=False)
+    def __init__(self, branches: List[HazardComponentBranch], source_weight: float):
+        self.branches = branches
 
-    def __post_init__(self) -> None:
-        self.weight = reduce(mul, [branch.weight for branch in self.branches])
+        # to avoid double counting gmcm branches when calculating the weight we find the unique gmcm branches
+        # since GMCMBranch objects are not hashable, we cannot use set()
+        gsims = []
+        for branch in self.branches:
+            for gsim in branch.gmcm_branches:
+                if gsim not in gsims:
+                    gsims.append(gsim)
+        gsim_weights = [gsim.weight for gsim in gsims]
+        self.weight = math.prod(gsim_weights) * source_weight
 
     def __iter__(self) -> 'HazardCompositeBranch':
         self.__counter = 0
@@ -183,7 +183,10 @@ class HazardLogicTree:
                 trts = srm_branch.tectonic_region_types
                 gmcm_branches = tuple(branch for branch in gmcm_composite_branch if branch.tectonic_region_type in trts)
                 hbranches.append(HazardComponentBranch(source_branch=srm_branch, gmcm_branches=gmcm_branches))
-            self._composite_branches.append(HazardCompositeBranch(hbranches))
+
+            # to use the correct weight for correlated source branches we
+            # must use the source branch weight which is correctly set
+            self._composite_branches.append(HazardCompositeBranch(hbranches, source_weight=srm_composite_branch.weight))
 
     def _generate_component_branches(self) -> None:
         self._component_branches = []

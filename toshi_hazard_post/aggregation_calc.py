@@ -38,6 +38,7 @@ class AggSharedArgs:
     weights: 'npt.NDArray'
     component_branches: List['HazardComponentBranch']
     branch_hash_table: List[List[str]]
+    skip_save: bool
 
 
 def convert_probs_to_rates(probs: 'pd.DataFrame') -> 'pd.DataFrame':
@@ -45,8 +46,7 @@ def convert_probs_to_rates(probs: 'pd.DataFrame') -> 'pd.DataFrame':
     Convert probabilies to rates assuming probabilies are Poissonian
     """
     probs['rates'] = probs['values'].apply(calculators.prob_to_rate, inv_time=1.0)
-    probs.drop('values', axis=1)
-    return probs
+    return probs.drop('values', axis=1)
 
 
 def calculate_aggs(branch_rates: 'npt.NDArray', weights: 'npt.NDArray', agg_types: Sequence[str]) -> 'npt.NDArray':
@@ -238,9 +238,12 @@ def calc_aggregation(task_args: AggTaskArgs, shared_args: AggSharedArgs, worker_
     time6 = time.perf_counter()
     log.debug('worker %s: time to calculate aggs %0.2f seconds' % (worker_name, time6 - time5))
 
-    log.info("worker %s saving result . . . " % worker_name)
     probs = calculators.rate_to_prob(hazard, 1.0)
-    save_aggregations(probs, location, vs30, imt, agg_types, hazard_model_id, compatibility_key)
+    if shared_args.skip_save:
+        log.info("worker %s SKIPPING SAVE . . . " % worker_name)
+    else:
+        log.info("worker %s saving result . . . " % worker_name)
+        save_aggregations(probs, location, vs30, imt, agg_types, hazard_model_id, compatibility_key)
     time7 = time.perf_counter()
     log.info(
         'worker %s time to perform one aggregation after loading data %0.2f seconds' % (worker_name, time7 - time2)

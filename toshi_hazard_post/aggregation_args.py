@@ -30,6 +30,10 @@ class AggregationArgs:
         self.imts = self._config['calculation'].get('imts', list(v.value for v in IntensityMeasureTypeEnum))
         self.agg_types = self._config['calculation'].get('agg_types', list(v.value for v in AggregationEnum))
 
+        self.skip_save = False
+        if self._config.get('debug'):
+            self.skip_save = self._config['debug'].get('skip_save')
+
     def _validate_compatibility(self) -> None:
         res = list(query_compatibility(self._config['general']['compatibility_key']))
         if not res:
