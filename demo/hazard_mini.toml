@@ -2,14 +2,14 @@
 compatibility_key = "NZSHM22-0"
 hazard_model_id = "MINI_DEMO_MODEL"
 
-[logic_trees]
+[hazard_model]
 # model_version = "NSHM_v1.0.4"
 
 # alternativly, specify a path to logic tree files
-srm_file = "srm_logic_tree_no_slab.json"
-gmcm_file = "gmcm_logic_tree_medium.json"
+srm_logic_tree = "srm_logic_tree_no_slab.json"
+gmcm_logic_tree = "gmcm_logic_tree_medium.json"
 
-[site]
+[site_params]
 vs30s = [275]
 #locations = ["WLG"]
 locations = ['srg_29', 'srg_55', 'srg_78', 'srg_93', 'srg_120', 'srg_132', 'srg_135', 'srg_142', 'srg_152', 'srg_169', 'srg_194', 'srg_203']

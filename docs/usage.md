@@ -27,14 +27,14 @@ The input file is a [toml](https://toml.io/en/) file that specifies the calculat
 compatibility_key = "A_A"
 hazard_model_id = "DEMO_MODEL"
 
-[logic_trees]
+[hazard_model]
 model_version = "NSHM_v1.0.4"
 
 # alternatively, specify a path to logic tree files
-# srm_file = "demo/srm_logic_tree_no_slab.json"
-# gmcm_file = "demo/gmcm_logic_tree_medium.json"
+# srm_logic_tree = "demo/srm_logic_tree_no_slab.json"
+# gmcm_logic_tree = "demo/gmcm_logic_tree_medium.json"
 
-[site]
+[site_params]
 vs30s = [275, 400]
 locations = ["WLG", "SRWG214", "-41.000~174.700", "myfile.csv"]
 
@@ -47,13 +47,13 @@ agg_types = ["mean", "cov", "std", "0.1", "0.005", "0.01", "0.025"]
 - `compatibility_key`: this is a string used to identify entries in the realization database that were created using a compatible hazard engine, i.e. all hazard curves created with the same compatibility key can be directly compared to each other. Differences will be due to changes in e.g. location, ground motion models, sources, etc. Differences will not be due to the hazard calculation algorithm. 
 - `hazard_model_id`: used to identify the model in the output, aggregation database
 
-### `[logic_trees]`
+### `[hazard_model]`
 Logic trees can be specified in one of two ways:
 
 1. Specify an official New Zealand NSHM model defined by the `nzhsm-model` package. This will use the logic trees (both SRM and GMCM) provided by `nzshm-model`. See the [nzhsm-model package documentation](https://gns-science.github.io/nzshm-model/usage/) for details.
 2. Specify a path to SRM and GMCM logic tree files. See the [nzhsm-model documentation](https://gns-science.github.io/nzshm-model/file-format/) for the file format.
 
-### `[site]`
+### `[site_params]`
 - `locations`: Site locations can be specified as a list of strings using the format specified for the `get_locations()` function in [`nzshm-common`](https://gns-science.github.io/nzshm-common-py).
 - `vs30s`: Site conditions are specified by vs30 and are specified by a list of ints. All vs30s will be applied to every location to produce `len(vs30s) * len(locations)` sites.
 

@@ -2,12 +2,12 @@
 compatibility_key = "A_A"
 hazard_model_id = "DEMO_MODEL"
 
-[logic_trees]
+[hazard_model]
 
-srm_file = "slt.json"
-gmcm_file = "glt.json"
+srm_logic_tree = "slt.json"
+gmcm_logic_tree = "glt.json"
 
-[site]
+[site_params]
 vs30s = [400]
 locations = ["NZ"]
 

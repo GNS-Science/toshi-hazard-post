@@ -2,11 +2,11 @@
 compatibility_key = "NZSHM22-0"
 hazard_model_id = "MINI_DEMO_MODEL"
 
-[logic_trees]
-srm_file = "srm_logic_tree_small.json"
-gmcm_file = "gmcm_logic_tree_complete.json"
+[hazard_model]
+srm_logic_tree = "srm_logic_tree_small.json"
+gmcm_logic_tree = "gmcm_logic_tree_complete.json"
 
-[site]
+[site_params]
 vs30s = [275]
 locations = ["WLG"]
 

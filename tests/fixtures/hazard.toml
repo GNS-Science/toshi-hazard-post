@@ -2,14 +2,14 @@
 compatibility_key = "A_A"
 hazard_model_id = "DEMO_MODEL"
 
-[logic_trees]
+[hazard_model]
 model_version = "NSHM_v1.0.4"
 
 # alternativly, specify a path to logic tree files
-# srm_file = "srm_logic_tree.json"
-# gmcm_file = "gmcm_logic_tree.json"
+# srm_logic_tree = "srm_logic_tree.json"
+# gmcm_logic_tree = "gmcm_logic_tree.json"
 
-[site]
+[site_params]
 vs30s = [400]
 locations = ["NZ"]
 
