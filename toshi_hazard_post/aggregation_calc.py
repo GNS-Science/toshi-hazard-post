@@ -84,10 +84,10 @@ def calculate_aggs(branch_rates: 'npt.NDArray', weights: 'npt.NDArray', agg_type
     idx_std = index(agg_types, "std")
     idx_cov = index(agg_types, "cov")
     idx_quantile = [is_float(agg) for agg in agg_types]
-    quantile_points = [float(pt) for pt in filter(is_float, agg_types)]
+    quantile_points = [float(pt) for pt in agg_types if is_float(pt)]
 
     nlevels = branch_rates.shape[1]
-    naggs = 3 + len(quantile_points)
+    naggs = len(agg_types)
     aggs = np.empty((naggs, nlevels))
 
     if (idx_mean is not None) | (idx_std is not None) | (idx_cov is not None):
