@@ -12,6 +12,7 @@
   
 ### Fixed
  - Composite branch weight bug
+ - Counting and indexing of aggregation types bug
 
 ## [0.4.0] - 2024-06-06
 
