@@ -12,7 +12,7 @@ vs30s = [400]
 locations = ["NZ"]
 
 # alternativly specify a file with locations and vs30 values
-# site_file = "sites.csv"
+# locations_file = "sites.csv"
 
 [calculation]
 imts = ["PGA", "SA(1.0)"]

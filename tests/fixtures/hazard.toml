@@ -3,7 +3,7 @@ compatibility_key = "A_A"
 hazard_model_id = "DEMO_MODEL"
 
 [hazard_model]
-model_version = "NSHM_v1.0.4"
+nshm_model_version = "NSHM_v1.0.4"
 
 # alternativly, specify a path to logic tree files
 # srm_logic_tree = "srm_logic_tree.json"
@@ -14,7 +14,7 @@ vs30s = [400]
 locations = ["NZ"]
 
 # alternativly specify a file with locations and vs30 values
-# site_file = "sites.csv"
+# locations_file = "sites.csv"
 
 [calculation]
 imts = ["PGA", "SA(1.0)"]
