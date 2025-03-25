@@ -1,6 +1,6 @@
 from pathlib import Path
 
-import toml
+import tomlkit
 from nzshm_common.location.location import LOCATION_LISTS
 from nzshm_model import get_model_version
 from nzshm_model.logic_tree import GMCMLogicTree, SourceLogicTree
@@ -18,7 +18,7 @@ def test_model():
         args.hazard_model.srm_logic_tree,
         args.hazard_model.gmcm_logic_tree,
     )
-    args_raw = toml.load(args_filepath)
+    args_raw = tomlkit.parse(args_filepath.read_text()).unwrap()
 
     model_expected = get_model_version(args_raw["hazard_model"]["nshm_model_version"])
     assert slt == model_expected.source_logic_tree
@@ -28,7 +28,7 @@ def test_model():
 def test_model_from_paths():
 
     args_filepath = Path(__file__).parent / 'fixtures' / 'hazard_lt_files.toml'
-    args_raw = toml.load(args_filepath)
+    args_raw = tomlkit.parse(args_filepath.read_text()).unwrap()
     args = load_input_args(args_filepath)
 
     slt_expected = SourceLogicTree.from_json(args_filepath.parent / args_raw['hazard_model']['srm_logic_tree'])
