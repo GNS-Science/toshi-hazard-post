@@ -6,7 +6,7 @@ import pandas as pd
 
 import toshi_hazard_post.local_config
 from toshi_hazard_post.aggregation import run_aggregation
-from toshi_hazard_post.aggregation_args import AggregationArgs
+from toshi_hazard_post.aggregation_args import load_input_args
 
 fixture_dir = resources.files('tests.fixtures.end_to_end')
 parquet_filepath = fixture_dir / 'rlz_probs_WLG.pq'
@@ -27,7 +27,7 @@ def test_end_to_end(load_mock, save_mock, monkeypatch):
     # Note that mocking must be done in the module where the mocked object is called
     monkeypatch.setattr(toshi_hazard_post.aggregation, 'get_config', mock_config)
     load_mock.return_value = pd.read_parquet(parquet_filepath)
-    agg_args = AggregationArgs(args_filepath)
+    agg_args = load_input_args(args_filepath)
 
     print(agg_args)
 

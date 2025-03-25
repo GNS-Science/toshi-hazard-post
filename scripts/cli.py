@@ -4,7 +4,7 @@ import os
 import click
 
 from toshi_hazard_post.aggregation import run_aggregation
-from toshi_hazard_post.aggregation_args import AggregationArgs
+from toshi_hazard_post.aggregation_args import load_input_args
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logging.getLogger('toshi_hazard_post').setLevel(logging.INFO)
@@ -29,7 +29,7 @@ def aggregate(input_file, config_file):
     if config_file:
         os.environ['THP_ENV_FILE'] = str(config_file)
 
-    args = AggregationArgs(input_file)
+    args = load_input_args(input_file)
     click.echo("Toshi Hazard Post: hazard curve aggregation")
     click.echo("=================================================")
     run_aggregation(args)

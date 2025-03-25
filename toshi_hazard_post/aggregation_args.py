@@ -4,12 +4,18 @@ from pathlib import Path
 from typing import Optional, Union, Any
 from pydantic import BaseModel, FilePath, model_validator, AfterValidator, PositiveInt, field_validator, ValidationInfo
 from typing_extensions import Annotated, Self
+import tomlkit
 
 from nzshm_model import all_model_versions, get_model_version
 from nzshm_model.logic_tree import GMCMLogicTree, SourceLogicTree
 from toshi_hazard_store.model.constraints import AggregationEnum, IntensityMeasureTypeEnum
 
 from toshi_hazard_post.ths_mock import query_compatibility
+
+def load_input_args(filepath: Union[str, Path]) -> 'AggregationArgs':
+    config = tomlkit.parse(Path(filepath).read_text()).unwrap()
+    config['filepath'] = Path(filepath)
+    return AggregationArgs(**config)
 
 def resolve_path(path: Union[Path, str], reference_filepath: Union[Path, str]) -> str:
     path = Path(path)
@@ -26,6 +32,7 @@ def check_compatibility_key(key: str) -> str:
     res = list(query_compatibility(key))
     if not res:
         raise ValueError("compatibility key {} does not exist in the database".format(key))
+    return key
 
 class GeneralArgs(BaseModel):
     compatibility_key: Annotated[str, AfterValidator(check_compatibility_key)]
@@ -111,12 +118,17 @@ class CalculationArgs(BaseModel):
             return [e for e in AggregationEnum]
         return value
 
+
+class DebugArgs(BaseModel):
+    skip_save: bool = False
+
 class AggregationArgs(BaseModel):
     filepath: FilePath
     general: GeneralArgs
     hazard_model: HazardModelArgs
     site_params: SiteArgs
     calculation: CalculationArgs
+    debug: DebugArgs = DebugArgs()
 
     # resolve absolute paths (relative to input file) for optional logic tree and config fields
     @field_validator('hazard_model', mode='before')
