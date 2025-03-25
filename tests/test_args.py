@@ -1,7 +1,5 @@
 import copy
 from pathlib import Path
-from unittest import mock
-from pydantic import ValidationError
 
 import pytest
 import tomlkit
@@ -100,7 +98,8 @@ def test_args_valid(config):
 
 
 @pytest.mark.parametrize(
-    "config", [
+    "config",
+    [
         config_keyerror1,
         config_keyerror2,
         config_keyerror3,
@@ -117,6 +116,8 @@ def test_args_valid(config):
         config_verror5,
     ],
 )
-def test_args_error(config,):
+def test_args_error(
+    config,
+):
     with pytest.raises(ValueError):
         AggregationArgs(**config)

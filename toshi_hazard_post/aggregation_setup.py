@@ -3,13 +3,12 @@ from collections import namedtuple
 from dataclasses import dataclass
 from itertools import product
 from pathlib import Path
-from typing import TYPE_CHECKING, Generator, Iterable, List, Union, Optional
+from typing import TYPE_CHECKING, Generator, Iterable, List, Optional, Union
 
 from nzshm_common.location.coded_location import CodedLocation
 from nzshm_common.location.location import get_locations
-
 from nzshm_model import get_model_version
-from nzshm_model.logic_tree import SourceLogicTree, GMCMLogicTree
+from nzshm_model.logic_tree import GMCMLogicTree, SourceLogicTree
 
 if TYPE_CHECKING:
     import numpy.typing as npt
@@ -47,44 +46,44 @@ def get_levels(compat_key: str) -> 'npt.NDArray':
     """
     return query_levels(compat_key)
 
+
 def get_logic_trees(
-        nshm_model_version: Optional[str] = None,
-        srm_logic_tree_filepath: Optional[Union[str, Path]] = None,
-        gmcm_logic_tree_filepath: Optional[Union[str, Path]] = None,
+    nshm_model_version: Optional[str] = None,
+    srm_logic_tree_filepath: Optional[Union[str, Path]] = None,
+    gmcm_logic_tree_filepath: Optional[Union[str, Path]] = None,
 ) -> tuple[SourceLogicTree, GMCMLogicTree]:
     """Get a source and ground motion logic tree given a NZ NSHM model version availble from nzhsm-model
     and/or filepaths to logic trees. Any logic tree files passed will take precidence over the logic
     trees from the model version (i.e. if nshm_model_version an srm_logic_tree_filepath are both passed,
     the ground motion logic tree will come from the nshm_model_version but the source logic tree will
     come from the file).
-    
+
     Parameters:
         nshm_model_version: model version from nzshm-model package
         srm_logic_tree_filepath: path to a json file defining a SourceLogicTree object
         gmcm_logic_tree_filepath: path to a json file defining a GMCMLogicTree object
 
     Returns:
-        a tuple of source logic tree and ground motion logic tree 
+        a tuple of source logic tree and ground motion logic tree
     """
 
     if nshm_model_version:
         model = get_model_version(nshm_model_version)
         srm_logic_tree = model.source_logic_tree
         gmcm_logic_tree = model.gmm_logic_tree
-    
+
     if srm_logic_tree_filepath:
         srm_logic_tree = SourceLogicTree.from_json(srm_logic_tree_filepath)
     if gmcm_logic_tree_filepath:
         gmcm_logic_tree = GMCMLogicTree.from_json(gmcm_logic_tree_filepath)
 
     return srm_logic_tree, gmcm_logic_tree
-        
 
 
 def get_sites(
-        locations_file: Optional[Path] = None,
-        locations: Optional[Iterable[str]] = None,
-        vs30s: Optional[Iterable[int]] = None,
+    locations_file: Optional[Path] = None,
+    locations: Optional[Iterable[str]] = None,
+    vs30s: Optional[Iterable[int]] = None,
 ) -> List[Site]:
     """
     Get the sites (combined location and vs30) at which to calculate hazard. Either a locations_file
@@ -115,14 +114,15 @@ def get_sites(
         coded_locations = get_locations(locations, resolution=0.001)
     elif locations_file:
         coded_locations = get_locations([locations_file], resolution=0.001)
-    
+
     if vs30s:
         sites = [Site(location, vs30) for location, vs30 in product(coded_locations, vs30s)]
     elif locations_file:
         vs30s = list(get_vs30s(locations_file))
         sites = list(map(Site, coded_locations, vs30s))
     else:
-        raise ValueError("""must provide one of: 
+        raise ValueError(
+            """must provide one of:
         a) locations and vs30s
         b) locations_file and vs30s
         c) locations_file with vs30 row"""

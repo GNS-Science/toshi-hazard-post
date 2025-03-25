@@ -6,7 +6,7 @@ from nzshm_model import get_model_version
 from nzshm_model.logic_tree import GMCMLogicTree, SourceLogicTree
 
 from toshi_hazard_post.aggregation_args import load_input_args
-from toshi_hazard_post.aggregation_setup import get_sites, get_logic_trees
+from toshi_hazard_post.aggregation_setup import get_logic_trees, get_sites
 
 
 def test_model():

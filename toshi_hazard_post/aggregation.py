@@ -11,7 +11,7 @@ from nzshm_common.location.coded_location import bin_locations
 
 from toshi_hazard_post.aggregation_args import AggregationArgs
 from toshi_hazard_post.aggregation_calc import AggSharedArgs, AggTaskArgs, calc_aggregation
-from toshi_hazard_post.aggregation_setup import Site, get_sites, get_logic_trees
+from toshi_hazard_post.aggregation_setup import Site, get_logic_trees, get_sites
 from toshi_hazard_post.local_config import get_config
 from toshi_hazard_post.logic_tree import HazardLogicTree
 from toshi_hazard_post.parallel import setup_parallel
@@ -87,7 +87,7 @@ def run_aggregation(args: AggregationArgs) -> None:
 
     assert args.calculation.agg_types is not None  # guarnteed to not be none by Pydantic validation function
     agg_types = [a.value for a in args.calculation.agg_types]
-    
+
     assert args.calculation.imts is not None  # guarnteed to not be none by Pydantic validation function
     imts = [i.value for i in args.calculation.imts]
 

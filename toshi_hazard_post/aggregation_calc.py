@@ -9,7 +9,6 @@ from typing import TYPE_CHECKING, Dict, List, Sequence
 
 import numpy as np
 
-from toshi_hazard_store.model.constraints import AggregationEnum, IntensityMeasureTypeEnum
 import toshi_hazard_post.calculators as calculators
 from toshi_hazard_post.data import load_realizations, save_aggregations
 

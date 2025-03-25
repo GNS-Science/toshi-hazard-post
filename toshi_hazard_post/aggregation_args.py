@@ -1,21 +1,22 @@
 import csv
 from collections import namedtuple
 from pathlib import Path
-from typing import Optional, Union, Any
-from pydantic import BaseModel, FilePath, model_validator, AfterValidator, PositiveInt, field_validator, ValidationInfo
-from typing_extensions import Annotated, Self
-import tomlkit
+from typing import Any, Optional, Union
 
-from nzshm_model import all_model_versions, get_model_version
-from nzshm_model.logic_tree import GMCMLogicTree, SourceLogicTree
+import tomlkit
+from nzshm_model import all_model_versions
+from pydantic import AfterValidator, BaseModel, FilePath, PositiveInt, ValidationInfo, field_validator, model_validator
 from toshi_hazard_store.model.constraints import AggregationEnum, IntensityMeasureTypeEnum
+from typing_extensions import Annotated, Self
 
 from toshi_hazard_post.ths_mock import query_compatibility
+
 
 def load_input_args(filepath: Union[str, Path]) -> 'AggregationArgs':
     config = tomlkit.parse(Path(filepath).read_text()).unwrap()
     config['filepath'] = Path(filepath)
     return AggregationArgs(**config)
+
 
 def resolve_path(path: Union[Path, str], reference_filepath: Union[Path, str]) -> str:
     path = Path(path)
@@ -23,10 +24,12 @@ def resolve_path(path: Union[Path, str], reference_filepath: Union[Path, str]) -
         return str(Path(reference_filepath).parent / path)
     return str(path)
 
+
 def is_model_version(value: str) -> str:
     if value not in all_model_versions():
         raise ValueError("must specify valid nshm_model_version ({})".format(all_model_versions()))
     return value
+
 
 def check_compatibility_key(key: str) -> str:
     res = list(query_compatibility(key))
@@ -34,9 +37,11 @@ def check_compatibility_key(key: str) -> str:
         raise ValueError("compatibility key {} does not exist in the database".format(key))
     return key
 
+
 class GeneralArgs(BaseModel):
     compatibility_key: Annotated[str, AfterValidator(check_compatibility_key)]
     hazard_model_id: str
+
 
 class HazardModelArgs(BaseModel):
     nshm_model_version: Annotated[Optional[str], AfterValidator(is_model_version)] = None
@@ -51,6 +56,7 @@ class HazardModelArgs(BaseModel):
                 gmcm_logic_tree and srm_logic_tree"""
             )
         return self
+
 
 class SiteArgs(BaseModel):
     vs30s: Optional[list[PositiveInt]] = None
@@ -98,7 +104,6 @@ class SiteArgs(BaseModel):
         return self
 
 
-
 class CalculationArgs(BaseModel):
     imts: Optional[list[IntensityMeasureTypeEnum]] = None
     agg_types: Optional[list[AggregationEnum]] = None
@@ -110,7 +115,6 @@ class CalculationArgs(BaseModel):
             return [e for e in IntensityMeasureTypeEnum]
         return value
 
-    
     @field_validator('agg_types', mode='after')
     @classmethod
     def all_agg_types(cls, value: Any) -> Any:
@@ -121,6 +125,7 @@ class CalculationArgs(BaseModel):
 
 class DebugArgs(BaseModel):
     skip_save: bool = False
+
 
 class AggregationArgs(BaseModel):
     filepath: FilePath
