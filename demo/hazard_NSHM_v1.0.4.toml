@@ -2,10 +2,10 @@
 compatibility_key = "NZSHM22-0"
 hazard_model_id = "NSHM_v1.0.4_DEMO_MODEL"
 
-[logic_trees]
-model_version = "NSHM_v1.0.4"
+[hazard_model]
+nshm_model_version = "NSHM_v1.0.4"
 
-[site]
+[site_params]
 vs30s = [275]
 # locations = ["WLG", "SRWG214", "-41.000~174.700", "myfile.csv"]
 locations = ["-34.500~173.000"]

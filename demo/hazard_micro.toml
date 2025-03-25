@@ -2,14 +2,14 @@
 compatibility_key = "NZSHM22-0"
 hazard_model_id = "MICRO_DEMO_MODEL"
 
-[logic_trees]
-# model_version = "NSHM_v1.0.4"
+[hazard_model]
+# nshm_model_version = "NSHM_v1.0.4"
 
 # alternativly, specify a path to logic tree files
-srm_file = "srm_logic_tree_micro.json"
-gmcm_file = "gmcm_logic_tree_small.json"
+srm_logic_tree = "srm_logic_tree_micro.json"
+gmcm_logic_tree = "gmcm_logic_tree_small.json"
 
-[site]
+[site_params]
 vs30s = [275]
 # locations = ["WLG", "SRWG214", "-41.000~174.700", "myfile.csv"]
 locations = ["-34.500~173.000"]
@@ -17,7 +17,7 @@ locations = ["-34.500~173.000"]
 # locations = ["MRO"]
 
 # alternativly specify a file with locations and vs30 values
-# site_file = "sites.csv"
+# locations_file = "sites.csv"
 
 [calculation]
 #imts = ["PGA", "SA(1.0)"]

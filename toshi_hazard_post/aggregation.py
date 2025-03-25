@@ -11,7 +11,7 @@ from nzshm_common.location.coded_location import bin_locations
 
 from toshi_hazard_post.aggregation_args import AggregationArgs
 from toshi_hazard_post.aggregation_calc import AggSharedArgs, AggTaskArgs, calc_aggregation
-from toshi_hazard_post.aggregation_setup import Site, get_sites
+from toshi_hazard_post.aggregation_setup import Site, get_logic_trees, get_sites
 from toshi_hazard_post.local_config import get_config
 from toshi_hazard_post.logic_tree import HazardLogicTree
 from toshi_hazard_post.parallel import setup_parallel
@@ -62,11 +62,16 @@ def run_aggregation(args: AggregationArgs) -> None:
     time0 = time.perf_counter()
     # get the sites
     log.info("getting sites . . .")
-    sites = get_sites(args.locations, args.vs30s)
+    sites = get_sites(args.site_params.locations_file, args.site_params.locations, args.site_params.vs30s)
+    srm_logic_tree, gmcm_logic_tree = get_logic_trees(
+        args.hazard_model.nshm_model_version,
+        args.hazard_model.srm_logic_tree,
+        args.hazard_model.gmcm_logic_tree,
+    )
 
     # create the logic tree objects and build the full logic tree
     log.info("getting logic trees . . . ")
-    logic_tree = HazardLogicTree(args.srm_logic_tree, args.gmcm_logic_tree)
+    logic_tree = HazardLogicTree(srm_logic_tree, gmcm_logic_tree)
 
     log.info("calculating weights and branch hash table . . . ")
     tic = time.perf_counter()
@@ -80,14 +85,20 @@ def run_aggregation(args: AggregationArgs) -> None:
 
     component_branches = logic_tree.component_branches
 
+    assert args.calculation.agg_types is not None  # guarnteed to not be none by Pydantic validation function
+    agg_types = [a.value for a in args.calculation.agg_types]
+
+    assert args.calculation.imts is not None  # guarnteed to not be none by Pydantic validation function
+    imts = [i.value for i in args.calculation.imts]
+
     shared_args = AggSharedArgs(
         weights=weights,
         branch_hash_table=branch_hash_table,
         component_branches=component_branches,
-        agg_types=args.agg_types,
-        hazard_model_id=args.hazard_model_id,
-        compatibility_key=args.compat_key,
-        skip_save=args.skip_save,
+        agg_types=agg_types,
+        hazard_model_id=args.general.hazard_model_id,
+        compatibility_key=args.general.compatibility_key,
+        skip_save=args.debug.skip_save,
     )
 
     task_queue: Union['queue.Queue', 'multiprocessing.JoinableQueue']
@@ -95,9 +106,9 @@ def run_aggregation(args: AggregationArgs) -> None:
     task_queue, result_queue = setup_parallel(num_workers, calc_aggregation, shared_args)
 
     time_parallel_start = time.perf_counter()
-    task_generator = TaskGenerator(sites, args.imts)
+    task_generator = TaskGenerator(sites, imts)
     num_jobs = 0
-    log.info("starting %d calculations" % (len(sites) * len(args.imts)))
+    log.info("starting %d calculations" % (len(sites) * len(imts)))
     for site, imt, location_bin in task_generator.task_generator():
         task_args = AggTaskArgs(
             location_bin=location_bin,
@@ -134,13 +145,3 @@ def run_aggregation(args: AggregationArgs) -> None:
         for result in results:
             if 'FAILED' in result:
                 print(result)
-
-
-# if __name__ == "__main__":
-#     config_filepath = "tests/version2/fixtures/hazard.toml"
-#     config = AggregationConfig(config_filepath)
-#     run_aggregation(config)
-#     print()
-#     print()
-#     print()
-#     run_aggregation_arrow(config)

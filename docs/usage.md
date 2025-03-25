@@ -27,16 +27,17 @@ The input file is a [toml](https://toml.io/en/) file that specifies the calculat
 compatibility_key = "A_A"
 hazard_model_id = "DEMO_MODEL"
 
-[logic_trees]
+[hazard_model]
 model_version = "NSHM_v1.0.4"
 
 # alternatively, specify a path to logic tree files
-# srm_file = "demo/srm_logic_tree_no_slab.json"
-# gmcm_file = "demo/gmcm_logic_tree_medium.json"
+# srm_logic_tree = "demo/srm_logic_tree_no_slab.json"
+# gmcm_logic_tree = "demo/gmcm_logic_tree_medium.json"
 
-[site]
+[site_params]
 vs30s = [275, 400]
-locations = ["WLG", "SRWG214", "-41.000~174.700", "myfile.csv"]
+locations = ["WLG", "SRWG214", "-41.000~174.700"]
+# locations_file = "locations.csv"
 
 [calculation]
 imts = ["PGA", "SA(0.2)", "SA(0.5)", "SA(1.5)", "SA(3.0)", "SA(5.0)"]
@@ -47,21 +48,20 @@ agg_types = ["mean", "cov", "std", "0.1", "0.005", "0.01", "0.025"]
 - `compatibility_key`: this is a string used to identify entries in the realization database that were created using a compatible hazard engine, i.e. all hazard curves created with the same compatibility key can be directly compared to each other. Differences will be due to changes in e.g. location, ground motion models, sources, etc. Differences will not be due to the hazard calculation algorithm. 
 - `hazard_model_id`: used to identify the model in the output, aggregation database
 
-### `[logic_trees]`
+### `[hazard_model]`
 Logic trees can be specified in one of two ways:
 
 1. Specify an official New Zealand NSHM model defined by the `nzhsm-model` package. This will use the logic trees (both SRM and GMCM) provided by `nzshm-model`. See the [nzhsm-model package documentation](https://gns-science.github.io/nzshm-model/usage/) for details.
 2. Specify a path to SRM and GMCM logic tree files. See the [nzhsm-model documentation](https://gns-science.github.io/nzshm-model/file-format/) for the file format.
 
-### `[site]`
-- `locations`: Site locations can be specified as a list of strings using the format specified for the `get_locations()` function in [`nzshm-common`](https://gns-science.github.io/nzshm-common-py).
+### `[site_params]`
 - `vs30s`: Site conditions are specified by vs30 and are specified by a list of ints. All vs30s will be applied to every location to produce `len(vs30s) * len(locations)` sites.
-
-Alternatively, site specific vs30 values can be applied to every site. This is done by omitting the `vs30` entry in the input file and specifying locations as a csv file. The format of the csv file is:
+- `locations`: Site locations can be specified as a list of strings using the format specified for the `get_locations()` function in [`nzshm-common`](https://gns-science.github.io/nzshm-common-py).
+- `locations_file`: Path to csv file with site locations. File can include a vs30 column for site-specific vs30 values rather than using the `vs30s` entry. The header row must have `"lat"`, and `"lon"`, and optionally `"vs30"`, e.g.
 ```
 lat,lon,vs30
--37.6,175.0,400
--43.8,171.5,200
+-40,170,250
+-45,170,750
 ```
 
 ### `[calculation]`
@@ -78,20 +78,20 @@ These two settings may be omitted, in which case the calc will be performed for 
 
 Users may want to manipulate arguments in a script to facilitate easy experimentation. Here is an example of altering the logic tree and re-running a calculation:
 ```py
-from toshi_hazard_post.aggregation_args import AggregationArgs
+from toshi_hazard_post.aggregation_args import load_input_args
 from toshi_hazard_post.aggregation import run_aggregation
+from toshi_hazard_post.aggregation_setup import get_logic_trees
 from nzshm_model.logic_tree.correlation import LogicTreeCorrelations
 
 # starting model
 input_file = "demo/hazard_mini.toml"
-args = AggregationArgs(input_file)
+args = load_input_args(input_file)
 
 # run model
 run_aggregation(args)
 
 # extract logic trees
-slt = args.srm_logic_tree
-glt = args.gmcm_logic_tree
+slt, glt = get_logic_trees(args.hazard_model.nshm_model_version, args.hazard_model.srm_logic_tree, args.hazard_model.gmcm_logic_tree)
 
 # modify SRM logic tree
 for branch_set in slt.branch_sets:
@@ -110,12 +110,12 @@ for branch_set in glt.branch_sets:
     print(branch_set.tectonic_region_type)
 glt.branch_sets = [glt.branch_sets[1]]
 
-# write logic trees to json for later use
+# write logic trees to json and add them to the arguments
 slt.to_json('slt_one_branch.json')
 glt.to_json('glt_crust_only.json')
+args.hazard_model.srm_logic_tree = 'slt_one_branch.json'
+args.hazard_model.gmcm_logic_tree = 'glt_crust_only.json'
+args.general.hazard_model_id = 'ONE_SRM_BRANCH'
 
-args.srm_logic_tree = slt
-args.gmcm_logic_tree = glt
-args.hazard_model_id = 'ONE_SRM_BRANCH'
 run_aggregation(args)
 ```
