@@ -79,7 +79,8 @@ def test_env_precidence(env_attr_val, monkeypatch):
     """test that env vars will take highest precidence"""
     monkeypatch.setenv('THP_ENV_FILE', str(user_filepath))
     env, attr, value = env_attr_val
-    os.environ[env] = str(value)
+    # os.environ[env] = str(value)
+    monkeypatch.setenv(env, str(value))
     assert get_config()[attr] == value
 
 
