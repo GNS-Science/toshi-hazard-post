@@ -60,7 +60,6 @@ def clear_env(monkeypatch):
         monkeypatch.delenv(var, raising=False)
 
 
-# @pytest.mark.skip("doesn't work in GHA")
 @pytest.mark.parametrize("attr,value", default_attrs)
 def test_default_values(attr, value):
     assert get_config()[attr] == value
@@ -74,12 +73,10 @@ def test_user_precidence(attr, value, monkeypatch):
     assert get_config()[attr] == value
 
 
-# @pytest.mark.skip("doesn't work in GHA")
 def test_env_precidence(env_attr_val, monkeypatch):
     """test that env vars will take highest precidence"""
     monkeypatch.setenv('THP_ENV_FILE', str(user_filepath))
     env, attr, value = env_attr_val
-    # os.environ[env] = str(value)
     monkeypatch.setenv(env, str(value))
     assert get_config()[attr] == value
 
