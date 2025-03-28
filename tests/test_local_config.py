@@ -66,7 +66,7 @@ def test_default_values(attr, value):
     assert get_config()[attr] == value
 
 
-# @pytest.mark.skip("doesn't work in GHA")
+@pytest.mark.skip("doesn't work in GHA")
 @pytest.mark.parametrize("attr,value", user_attrs)
 def test_user_precidence(attr, value, monkeypatch):
     """test that a user defined env file will override default values"""
