@@ -38,7 +38,7 @@ def setup_parallel(
 def setup_multiproc(
     num_workers: int, func: Callable, shared_args: 'AggSharedArgs'
 ) -> Tuple[multiprocessing.JoinableQueue, multiprocessing.Queue]:
-    log.info("creating %d multiprocessing workers" % num_workers)
+    log.info("creating %d multiprocessing workers" % num_workers)  # pragma: no mutate
     task_queue: multiprocessing.JoinableQueue = multiprocessing.JoinableQueue()
     result_queue: multiprocessing.Queue = multiprocessing.Queue()
     pfunc = partial(func, shared_args=shared_args)
@@ -49,7 +49,7 @@ def setup_multiproc(
 
 
 def setup_serial(func: Callable, shared_args: 'AggSharedArgs') -> Tuple[queue.Queue, queue.Queue]:
-    log.info("creating one serial worker")
+    log.info("creating one serial worker")  # pragma: no mutate
     task_queue: queue.Queue = queue.Queue()
     result_queue: queue.Queue = queue.Queue()
     pfunc = partial(func, shared_args=shared_args)
@@ -60,23 +60,23 @@ def setup_serial(func: Callable, shared_args: 'AggSharedArgs') -> Tuple[queue.Qu
 
 class Worker:
     def run(self):
-        log.info("worker %s running." % self.name)
+        log.info("worker %s running." % self.name)  # pragma: no mutate
         proc_name = self.name
 
         while True:
-            log.debug("worker %s: requesting task" % self.name)
+            log.debug("worker %s: requesting task" % self.name)  # pragma: no mutate
             task_args = self.task_queue.get()
             if task_args is None:
                 # Poison pill means shutdown
                 self.task_queue.task_done()
-                log.info('%s: Exiting' % proc_name)
+                log.info('%s: Exiting' % proc_name)  # pragma: no mutate
                 break
-            log.info("worker %s: working on hazard for site: %s, imt: %s" % (self.name, task_args.site, task_args.imt))
+            log.info("worker %s: working on hazard for site: %s, imt: %s" % (self.name, task_args.site, task_args.imt))  # pragma: no mutate
 
             try:
                 self.func(task_args=task_args, worker_name=self.name)  # calc_aggregation
                 self.task_queue.task_done()
-                log.info('%s task done.' % self.name)
+                log.info('%s task done.' % self.name)  # pragma: no mutate
                 self.result_queue.put(str(task_args.imt))
             except Exception:
                 log.error(traceback.format_exc())

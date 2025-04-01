@@ -209,7 +209,7 @@ def calc_aggregation(task_args: AggTaskArgs, shared_args: AggSharedArgs, worker_
     location = site.location
     vs30 = site.vs30
 
-    log.info("worker %s: loading realizations . . ." % (worker_name))
+    log.info("worker %s: loading realizations . . ." % (worker_name))  # pragma: no mutate
     time1 = time.perf_counter()
 
     component_probs = load_realizations(imt, location, vs30, location_bin, component_branches, compatibility_key)
@@ -233,22 +233,22 @@ def calc_aggregation(task_args: AggTaskArgs, shared_args: AggSharedArgs, worker_
     time5 = time.perf_counter()
     log.debug('worker %s: time to build_ranch_rates %0.2f seconds' % (worker_name, time5 - time4))
 
-    log.info("worker %s:  calculating aggregates . . . " % worker_name)
+    log.info("worker %s:  calculating aggregates . . . " % worker_name)  # pragma: no mutate
     hazard = calculate_aggs(composite_rates, weights, agg_types)
     time6 = time.perf_counter()
     log.debug('worker %s: time to calculate aggs %0.2f seconds' % (worker_name, time6 - time5))
 
     probs = calculators.rate_to_prob(hazard, 1.0)
     if shared_args.skip_save:
-        log.info("worker %s SKIPPING SAVE . . . " % worker_name)
+        log.info("worker %s SKIPPING SAVE . . . " % worker_name)  # pragma: no mutate
     else:
-        log.info("worker %s saving result . . . " % worker_name)
+        log.info("worker %s saving result . . . " % worker_name)  # pragma: no mutate
         save_aggregations(probs, location, vs30, imt, agg_types, hazard_model_id, compatibility_key)
     time7 = time.perf_counter()
     log.info(
-        'worker %s time to perform one aggregation after loading data %0.2f seconds' % (worker_name, time7 - time2)
+        'worker %s time to perform one aggregation after loading data %0.2f seconds' % (worker_name, time7 - time2)  # pragma: no mutate
     )
-    log.info('worker %s time to perform one aggregation %0.2f seconds' % (worker_name, time7 - time0))
+    log.info('worker %s time to perform one aggregation %0.2f seconds' % (worker_name, time7 - time0))  # pragma: no mutate
     # time.sleep(30)
 
     return None

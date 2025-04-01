@@ -61,7 +61,7 @@ def run_aggregation(args: AggregationArgs) -> None:
 
     time0 = time.perf_counter()
     # get the sites
-    log.info("getting sites . . .")
+    log.info("getting sites . . .")  # pragma: no mutate
     sites = get_sites(args.site_params.locations_file, args.site_params.locations, args.site_params.vs30s)
     srm_logic_tree, gmcm_logic_tree = get_logic_trees(
         args.hazard_model.nshm_model_version,
@@ -70,18 +70,18 @@ def run_aggregation(args: AggregationArgs) -> None:
     )
 
     # create the logic tree objects and build the full logic tree
-    log.info("getting logic trees . . . ")
+    log.info("getting logic trees . . . ")  # pragma: no mutate
     logic_tree = HazardLogicTree(srm_logic_tree, gmcm_logic_tree)
 
-    log.info("calculating weights and branch hash table . . . ")
+    log.info("calculating weights and branch hash table . . . ")  # pragma: no mutate
     tic = time.perf_counter()
     weights = logic_tree.weights
     branch_hash_table = logic_tree.branch_hash_table
     toc = time.perf_counter()
 
-    log.info('time to build weight array and hash table %0.2f seconds' % (toc - tic))
-    log.info("Size of weight array: {}MB".format(weights.nbytes >> 20))
-    log.info("Size of hash table: {}MB".format(sys.getsizeof(branch_hash_table) >> 20))
+    log.info('time to build weight array and hash table %0.2f seconds' % (toc - tic))  # pragma: no mutate
+    log.info("Size of weight array: {}MB".format(weights.nbytes >> 20))  # pragma: no mutate
+    log.info("Size of hash table: {}MB".format(sys.getsizeof(branch_hash_table) >> 20))  # pragma: no mutate
 
     component_branches = logic_tree.component_branches
 

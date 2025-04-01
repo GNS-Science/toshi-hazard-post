@@ -112,10 +112,10 @@ def get_arrow_filesystem(
 ) -> Tuple[fs.FileSystem, str]:
 
     if fs_type is ArrowFS.LOCAL:
-        log.info("getting local ArrowFS %s" % local_dir)
+        log.info("getting local ArrowFS %s" % local_dir)  # pragma: no mutate
         filesystem, root = get_local_fs(local_dir)
     elif fs_type is ArrowFS.AWS:
-        log.info("getting S3 ArrowFS %s:%s" % (aws_region, s3_bucket))
+        log.info("getting S3 ArrowFS %s:%s" % (aws_region, s3_bucket))  # pragma: no mutate
         filesystem, root = get_s3_fs(aws_region, s3_bucket)
     else:
         filesystem = root = None
@@ -139,7 +139,7 @@ def get_realizations_dataset() -> ds.Dataset:
     t0 = time.monotonic()
     dataset = ds.dataset(f'{root}', format='parquet', filesystem=filesystem, partitioning='hive')
     t1 = time.monotonic()
-    log.info("time to get realizations dataset %0.6f" % (t1 - t0))
+    log.info("time to get realizations dataset %0.6f" % (t1 - t0))  # pragma: no mutate
 
     return dataset
 
@@ -201,9 +201,9 @@ def load_realizations(
             f"no realizations were found in the database for {location=}, {imt=}, {vs30=}, {compatibility_key=}"
         )
 
-    log.info("load scanner:%0.6f, to_arrow %0.6fs" % (t1 - t0, t2 - t1))
-    log.info("RSS: {}MB".format(pa.total_allocated_bytes() >> 20))
-    log.info("loaded %s realizations in arrow", rlz_table.shape[0])
+    log.info("load scanner:%0.6f, to_arrow %0.6fs" % (t1 - t0, t2 - t1))  # pragma: no mutate
+    log.info("RSS: {}MB".format(pa.total_allocated_bytes() >> 20))  # pragma: no mutate
+    log.info("loaded %s realizations in arrow", rlz_table.shape[0])  # pragma: no mutate
     # all_values = rlz_table.to_pandas()['values']
     # from itertools import chain
     # import numpy as np
