@@ -57,6 +57,7 @@ types-toml = "^0.10.8.20240310"
 types-requests = "^2.32.0.20241016"
 tox = "^4.24.1"
 mypy = "^1.15.0"
+mutmut = "^3.2.3"
 
 
 [tool.poetry.group.doc.dependencies]
@@ -110,3 +111,8 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.pytest.ini_options]
 addopts = "--ignore=scratch"
+
+[tool.mutmut]
+paths_to_mutate = [ "toshi_hazard_post/" ]
+tests_dir = [ "tests/" ]
+do_not_mutate = ["tests/test_end_to_end.py"]
