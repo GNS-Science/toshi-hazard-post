@@ -13,6 +13,6 @@ jobs:
       with:
         # re-enable ubuntu after https://github.com/GNS-Science/toshi-hazard-post/issues/62
         # re-enable windows after https://github.com/GNS-Science/toshi-hazard-post/issues/63
-        operating-systems: "['macos-latest']" # "['ubuntu-latest', 'macos-latest', 'windows-latest']"
-        python-versions: "['3.9', '3.10']"
+        operating-systems: "['ubuntu-latest', 'macos-latest', 'windows-latest']"
+        python-versions: "['3.9']" #"['3.9', '3.10']"
       secrets: inherit
