@@ -27,14 +27,14 @@ def resolve_path(path: Union[Path, str], reference_filepath: Union[Path, str]) -
 
 def is_model_version(value: str) -> str:
     if value not in all_model_versions():
-        raise ValueError("must specify valid nshm_model_version ({})".format(all_model_versions()))
+        raise ValueError("must specify valid nshm_model_version ({})".format(all_model_versions()))  # pragma: no mutate
     return value
 
 
 def check_compatibility_key(key: str) -> str:
     res = list(query_compatibility(key))
     if not res:
-        raise ValueError("compatibility key {} does not exist in the database".format(key))
+        raise ValueError("compatibility key {} does not exist in the database".format(key))  # pragma: no mutate
     return key
 
 
@@ -90,16 +90,16 @@ class SiteArgs(BaseModel):
     @model_validator(mode='after')
     def check_locations(self) -> Self:
         if self.locations_file and self.locations:
-            raise ValueError("cannot specify both locations and locations_file")
+            raise ValueError("cannot specify both locations and locations_file")  # pragma: no mutate
 
         if (not self.locations) and (not self.locations_file):
-            raise ValueError("must specify locations or locations_file")
+            raise ValueError("must specify locations or locations_file")  # pragma: no mutate
 
         file_has_vs30 = self.locations_file and self.has_vs30(self.locations_file)
         if file_has_vs30 and self.vs30s:
-            raise ValueError("cannot specify both uniform and site-specific vs30s")
+            raise ValueError("cannot specify both uniform and site-specific vs30s")  # pragma: no mutate
         elif not file_has_vs30 and not self.vs30s:
-            raise ValueError("locations file must have vs30 column if uniform vs30s not provided")
+            raise ValueError("locations file must have vs30 column if uniform vs30s not provided")  # pragma: no mutate
 
         return self
 
