@@ -11,7 +11,6 @@ jobs:
   call-test-workflow:
       uses: GNS-Science/nshm-github-actions/.github/workflows/python-run-tests.yml@main
       with:
-        # re-enable 3.10 after https://github.com/GNS-Science/toshi-hazard-post/issues/62
         operating-systems: "['ubuntu-latest', 'macos-latest', 'windows-latest']"
-        python-versions: "['3.9']" #"['3.9', '3.10']"
+        python-versions: "['3.9', '3.10']"
       secrets: inherit
