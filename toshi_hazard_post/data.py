@@ -137,7 +137,10 @@ def get_realizations_dataset() -> ds.Dataset:
     filesystem, root = get_rlz_filesystem()
 
     t0 = time.monotonic()
-    dataset = ds.dataset(f'{root}', format='parquet', filesystem=filesystem, partitioning='hive')
+    # TODO: hive paritioning raises exception
+    # pyarrow.lib.ArrowTypeError: Unable to merge: Field nloc_0 has incompatible types: dictionary<values=string, indices=int32, ordered=1> vs string
+    # dataset = ds.dataset(f'{root}', format='parquet', filesystem=filesystem, partitioning='hive')
+    dataset = ds.dataset(f'{root}', format='parquet', filesystem=filesystem)
     t1 = time.monotonic()
     log.info("time to get realizations dataset %0.6f" % (t1 - t0))
 
@@ -180,7 +183,7 @@ def load_realizations(
     sources_digests = [branch.source_hash_digest for branch in component_branches]
 
     flt = (
-        (pc.field('compatible_calc_fk') == pc.scalar(compatibility_key))
+        (pc.field('compatible_calc_id') == pc.scalar(compatibility_key))
         & (pc.is_in(pc.field('sources_digest'), pa.array(sources_digests)))
         & (pc.is_in(pc.field('gmms_digest'), pa.array(gmms_digests)))
         & (pc.field('nloc_0') == pc.scalar(location_bin.code))
