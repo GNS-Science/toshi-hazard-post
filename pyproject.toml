@@ -32,7 +32,6 @@ thp = 'scripts.cli:thp'
 
 [tool.poetry.dependencies]
 python = ">=3.10,<3.12"
-toshi-hazard-store = "^0.9.1"
 numpy = "^1.26.4"
 pandas = "^2.0.3"
 numba = "^0.61.0"
@@ -44,6 +43,7 @@ nzshm-common = "^0.8.4"
 nzshm-model = "^0.13.5"
 pydantic = "^2.10.6"
 tomlkit = "^0.13.2"
+toshi-hazard-store = {git = "https://github.com/GNS-Science/toshi-hazard-store.git", rev = "pre-release-v1.0"}
 
 [tool.poetry.group.dev.dependencies]
 black = "^25.1.0"
