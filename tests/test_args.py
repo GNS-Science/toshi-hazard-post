@@ -47,6 +47,11 @@ config_keyerror3 = get_config()
 del config_keyerror3['hazard_model']['nshm_model_version']
 config_keyerror3['hazard_model']['srm_logic_tree'] = config_filepath
 
+# the compatability key must exist
+config_error4 = get_config()
+config_error4['general']['compatibility_key'] = "NOT A COMPAT KEY"
+
+
 # if specifying logic tree files, they must exist
 config_fnferror1 = get_config()
 del config_fnferror1['hazard_model']['nshm_model_version']
@@ -103,6 +108,7 @@ def test_args_valid(config):
         config_keyerror1,
         config_keyerror2,
         config_keyerror3,
+        config_error4,
         # config_keyerror4,
         # config_keyerror5,
         config_keyerror6,

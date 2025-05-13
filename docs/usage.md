@@ -5,10 +5,7 @@
 toshi-hazard-post requires some configuration to run. This can either be done via a environment variables and/or a configuration file. Environment variables will override settings in the configuration file.
 
 - THP_NUM_WORKERS: number of parallel processes to run (default: 1)
-- THP_{RLZ|AGG}_FS: the filesystem to use for the {realization or aggregate} datastore (default: "LOCAL")
-- THP_{RLZ|AGG}_LOCAL_DIR: the path to the local {realization or aggregate} datastore
-- THP_{RLZ|AGG}_S3_BUCKET: the S3 bucket where the {realization or aggregate} datastore is kept
-- THP_{RLZ|AGG}_AWS_REGION: the AWS region for {realization or aggregate} if using S3 datastore
+- THP_{RLZ|AGG}_DIR: the path to the {realization or aggregate} datastore. Can be a local filepath or S3 URI
 
 Values for the filesystem variables can be `"LOCAL"` or `"AWS"` indicating the parquet files are stored on a local disk or in an S3 bucket. By default, toshi-hazard-post will look for a configuration file named `.env`, though you can specify a different file on the command line with the `---config-file` option.
 
