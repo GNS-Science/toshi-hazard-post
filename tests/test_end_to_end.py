@@ -1,9 +1,8 @@
 import importlib.resources as resources
 import os
-from unittest import mock
+from pathlib import Path
 
 import numpy as np
-import pandas as pd
 import pyarrow.dataset as ds
 from toshi_hazard_store.model.pyarrow import pyarrow_dataset
 
@@ -18,18 +17,14 @@ args_filepath = fixture_dir / 'hazard.toml'
 aggs_expected_filepath = fixture_dir / 'aggregations_275_PGA_WLG.npy'
 
 
-@mock.patch('toshi_hazard_post.aggregation_calc.load_realizations')
-def test_end_to_end(load_mock, tmp_path):
+def test_end_to_end(tmp_path):
     probs_expected = np.load(aggs_expected_filepath)
 
+    os.environ["THP_RLZ_DIR"] = str(Path(__file__).parent / 'fixtures/end_to_end/rlz')
     os.environ["THP_AGG_DIR"] = str(tmp_path)
     os.environ["THP_NUM_WORKERS"] = "1"
 
-    load_mock.return_value = pd.read_parquet(parquet_filepath)
     agg_args = load_input_args(args_filepath)
-
-    print(agg_args)
-
     run_aggregation(agg_args)
 
     # read the aggregation back out and compare
