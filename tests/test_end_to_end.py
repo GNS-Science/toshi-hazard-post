@@ -1,10 +1,12 @@
 import importlib.resources as resources
+import os
 from unittest import mock
 
 import numpy as np
 import pandas as pd
+import pyarrow.dataset as ds
+from toshi_hazard_store.model.pyarrow import pyarrow_dataset
 
-import toshi_hazard_post.local_config
 from toshi_hazard_post.aggregation import run_aggregation
 from toshi_hazard_post.aggregation_args import load_input_args
 
@@ -16,21 +18,23 @@ args_filepath = fixture_dir / 'hazard.toml'
 aggs_expected_filepath = fixture_dir / 'aggregations_275_PGA_WLG.npy'
 
 
-@mock.patch('toshi_hazard_post.aggregation_calc.save_aggregations')
 @mock.patch('toshi_hazard_post.aggregation_calc.load_realizations')
-def test_end_to_end(load_mock, save_mock, monkeypatch):
-    aggs_expected = np.load(aggs_expected_filepath)
+def test_end_to_end(load_mock, tmp_path):
+    probs_expected = np.load(aggs_expected_filepath)
 
-    def mock_config():
-        return dict(NUM_WORKERS=1)
+    os.environ["THP_AGG_DIR"] = str(tmp_path)
+    os.environ["THP_NUM_WORKERS"] = "1"
 
-    # Note that mocking must be done in the module where the mocked object is called
-    monkeypatch.setattr(toshi_hazard_post.aggregation, 'get_config', mock_config)
     load_mock.return_value = pd.read_parquet(parquet_filepath)
     agg_args = load_input_args(args_filepath)
 
     print(agg_args)
 
     run_aggregation(agg_args)
-    aggs = save_mock.mock_calls[0].args[0]
-    np.testing.assert_allclose(aggs, aggs_expected, rtol=1e-07, atol=1e-08)
+
+    # read the aggregation back out and compare
+    rlz_dir, filesystem = pyarrow_dataset.configure_output(str(tmp_path))
+    dataset = ds.dataset(rlz_dir, format="parquet", filesystem=filesystem, partitioning="hive")
+    probs = np.stack(ds.Scanner.from_dataset(dataset).to_table().to_pandas()['values'].values)
+
+    np.testing.assert_allclose(probs, probs_expected, rtol=1e-07, atol=1e-08)

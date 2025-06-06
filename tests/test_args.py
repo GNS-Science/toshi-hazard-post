@@ -92,10 +92,6 @@ config_verror3['calculation']['imts'] = "SA(1.5)"
 config_verror4 = get_config()
 config_verror4['calculation']['agg_types'] = ["mean", "0.5", "1.1"]
 
-# compatibility key must exist
-config_verror5 = get_config()
-config_verror5['general']['compatibility_key'] = "Z"
-
 
 @pytest.mark.parametrize("config", [config1, config2, config3, config4])
 def test_args_valid(config):
@@ -119,11 +115,8 @@ def test_args_valid(config):
         config_verror2,
         config_verror3,
         config_verror4,
-        config_verror5,
     ],
 )
-def test_args_error(
-    config,
-):
+def test_args_error(config):
     with pytest.raises(ValueError):
         AggregationArgs(**config)

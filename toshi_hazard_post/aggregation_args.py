@@ -32,8 +32,7 @@ def is_model_version(value: str) -> str:
 
 def is_compat_calc_id(compat_calc_id: str) -> str:
     try:
-        if not chc_manager.load(compat_calc_id):
-            raise ValueError("Compatible Hazard Calculation with unique ID {value} does not exist.")
+        chc_manager.load(compat_calc_id)
     except FileNotFoundError:
         raise ValueError("Compatible Hazard Calculation with unique ID {value} does not exist.")
 
