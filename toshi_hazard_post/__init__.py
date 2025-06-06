@@ -3,4 +3,4 @@ This is the top-level package for toshi_hazard_post. This application calculates
 pre-calculated realizations.
 """
 
-__version__ = '0.5.0'
+__version__ = '0.6.0'

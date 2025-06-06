@@ -1,5 +1,5 @@
 [general]
-compatibility_key = "NZSHM22-0"
+compatibility_key = "NZSHM22"
 hazard_model_id = "MINI_DEMO_MODEL"
 
 [hazard_model]
