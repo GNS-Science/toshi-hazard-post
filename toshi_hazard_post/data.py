@@ -4,14 +4,14 @@ Functions for loading realizations and saving aggregations
 
 import logging
 import time
-from typing import TYPE_CHECKING, List, Tuple
+from typing import TYPE_CHECKING, List
 
 import pandas as pd
 import pyarrow as pa
 import pyarrow.compute as pc
 import pyarrow.dataset as ds
-from pyarrow import fs
-from toshi_hazard_store.model.revision_4 import hazard_aggregate_curve, pyarrow_aggr_dataset, pyarrow_dataset
+from toshi_hazard_store.model.hazard_models_pydantic import HazardAggregateCurve
+from toshi_hazard_store.model.pyarrow import pyarrow_aggr_dataset, pyarrow_dataset
 
 from toshi_hazard_post.local_config import get_config
 
@@ -22,11 +22,6 @@ if TYPE_CHECKING:
     from nzshm_common.location.coded_location import CodedLocation, CodedLocationBin
 
     from toshi_hazard_post.logic_tree import HazardComponentBranch
-
-try:
-    import boto3
-except ModuleNotFoundError:
-    log.warning("warning boto3 module dependency not available, maybe you want to install with nzshm-model[boto3]")
 
 
 def save_aggregations(
@@ -50,39 +45,26 @@ def save_aggregations(
         hazard_model_id: the model id for storing in the database
     """
 
-    config = get_config()
-    rlz_dir, filesystem = pyarrow_dataset.configure_output(config['AGG_DIR'])
-
     def generate_models():
         for i, agg in enumerate(agg_types):
-            yield hazard_aggregate_curve.HazardAggregateCurve(
-                compatible_calc_fk=('A', compatability_key),
+            yield HazardAggregateCurve(
+                compatible_calc_id=compatability_key,
                 hazard_model_id=hazard_model_id,
-                values=hazard[i, :],
+                nloc_001=location.code,
+                nloc_0=location.downsample(1.0).code,
                 imt=imt,
                 vs30=vs30,
-                agg=agg,
-            ).set_location(location)
+                aggr=agg,
+                values=hazard[i, :],
+            )
 
-    pyarrow_aggr_dataset.append_models_to_dataset(generate_models(), rlz_dir, filesystem=filesystem)
-    # write_aggs_to_ths(hazard, location, vs30, imt, agg_types, hazard_model_id)
+    config = get_config()
 
-
-def get_local_fs(local_dir) -> Tuple[fs.FileSystem, str]:
-    return fs.LocalFileSystem(), str(local_dir)
-
-
-def get_s3_fs(region, bucket) -> Tuple[fs.FileSystem, str]:
-    session = boto3.session.Session()
-    credentials = session.get_credentials()
-    filesystem = fs.S3FileSystem(
-        secret_key=credentials.secret_key,
-        access_key=credentials.access_key,
-        region=region,
-        session_token=credentials.token,
+    agg_dir, filesystem = pyarrow_dataset.configure_output(config['AGG_DIR'])
+    partitioning = ['vs30', 'nloc_0']
+    pyarrow_aggr_dataset.append_models_to_dataset(
+        models=generate_models(), base_dir=agg_dir, filesystem=filesystem, partitioning=partitioning
     )
-    root = bucket
-    return filesystem, root
 
 
 def get_realizations_dataset() -> ds.Dataset:
@@ -107,15 +89,6 @@ def get_realizations_dataset() -> ds.Dataset:
     log.info("time to get realizations dataset %0.6f" % (t1 - t0))
 
     return dataset
-
-
-def load_realizations_mock(
-    imt: str,
-    location: 'CodedLocation',
-    vs30: int,
-):
-    filename = f"/work/chrisdc/NZSHM-WORKING/PROD/tmp_data/component_{location.code}_{vs30}_{imt}"
-    return pd.read_pickle(filename).to_dict()['rates']
 
 
 def load_realizations(

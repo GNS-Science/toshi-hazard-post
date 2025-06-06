@@ -3,17 +3,12 @@ from collections import namedtuple
 from dataclasses import dataclass
 from itertools import product
 from pathlib import Path
-from typing import TYPE_CHECKING, Generator, Iterable, List, Optional, Union
+from typing import Generator, Iterable, List, Optional, Union
 
 from nzshm_common.location.coded_location import CodedLocation
 from nzshm_common.location.location import get_locations
 from nzshm_model import get_model_version
 from nzshm_model.logic_tree import GMCMLogicTree, SourceLogicTree
-
-if TYPE_CHECKING:
-    import numpy.typing as npt
-
-from toshi_hazard_post.ths_mock import query_levels
 
 
 @dataclass
@@ -32,19 +27,6 @@ def get_vs30s(site_filepath: Union[str, Path]) -> Generator[int, None, None]:
         for row in reader:
             site = SiteCSV(*row)
             yield int(site.vs30)  # type:ignore
-
-
-def get_levels(compat_key: str) -> 'npt.NDArray':
-    """
-    Get the intensity measure type levels (IMTLs) for the hazard curve from the compatibility table
-
-    Parameters:
-        compatibility_key: the key identifying the hazard calculation compatibility entry
-
-    Returns:
-        levels: the IMTLs for the hazard calculation
-    """
-    return query_levels(compat_key)
 
 
 def get_logic_trees(

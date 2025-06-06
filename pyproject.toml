@@ -35,14 +35,13 @@ python = ">=3.10,<3.12"
 pandas = "^2.0.3"
 click = "^8.1.8"
 python-dotenv = "^1.0.1"
-boto3 = {version = "^1.37.0", optional = true}
 pyarrow = {version = ">=15.0", extras = ["pandas"]}
 nzshm-common = "^0.8.4"
 nzshm-model = "^0.13.5"
 pydantic = "^2.10.6"
 tomlkit = "^0.13.2"
 numba = "<0.61.0"
-toshi-hazard-store = "^1.0.0"
+toshi-hazard-store = "^1.1.0"
 
 [tool.poetry.group.dev.dependencies]
 black = "^25.1.0"
