@@ -3621,9 +3621,9 @@ test = ["big-O", "importlib-resources ; python_version < \"3.9\"", "jaraco.funct
 type = ["pytest-mypy"]
 
 [extras]
-aws = ["boto3"]
+aws = []
 
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.10,<3.12"
-content-hash = "5c8c3e9346ab586a2f41226a95c815163e172e2fa5b8a59c661b3e1dcbd388ed"
+content-hash = "1c733754df57e101d3d87066afcb3e3ee0da7c2762eca052bc2af3708eb62706"
