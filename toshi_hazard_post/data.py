@@ -61,7 +61,7 @@ def save_aggregations(
     config = get_config()
 
     agg_dir, filesystem = pyarrow_dataset.configure_output(config['AGG_DIR'])
-    partitioning = ['vs30', 'nloc_0']
+    partitioning = ['vs30', 'imt', 'nloc_001']
     pyarrow_aggr_dataset.append_models_to_dataset(
         models=generate_models(), base_dir=agg_dir, filesystem=filesystem, partitioning=partitioning
     )
