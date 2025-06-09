@@ -7,9 +7,8 @@ import tomlkit
 from nzshm_model import all_model_versions
 from pydantic import AfterValidator, BaseModel, FilePath, PositiveInt, ValidationInfo, field_validator, model_validator
 from toshi_hazard_store.model.constraints import AggregationEnum, IntensityMeasureTypeEnum
+from toshi_hazard_store.scripts.ths_import import chc_manager
 from typing_extensions import Annotated, Self
-
-from toshi_hazard_post.ths_mock import query_compatibility
 
 
 def load_input_args(filepath: Union[str, Path]) -> 'AggregationArgs':
@@ -31,15 +30,17 @@ def is_model_version(value: str) -> str:
     return value
 
 
-def check_compatibility_key(key: str) -> str:
-    res = list(query_compatibility(key))
-    if not res:
-        raise ValueError("compatibility key {} does not exist in the database".format(key))
-    return key
+def is_compat_calc_id(compat_calc_id: str) -> str:
+    try:
+        chc_manager.load(compat_calc_id)
+    except FileNotFoundError:
+        raise ValueError("Compatible Hazard Calculation with unique ID {value} does not exist.")
+
+    return compat_calc_id
 
 
 class GeneralArgs(BaseModel):
-    compatibility_key: Annotated[str, AfterValidator(check_compatibility_key)]
+    compatibility_key: Annotated[str, AfterValidator(is_compat_calc_id)]
     hazard_model_id: str
 
 

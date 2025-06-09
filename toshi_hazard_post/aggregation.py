@@ -58,6 +58,7 @@ def run_aggregation(args: AggregationArgs) -> None:
         config: the aggregation configuration
     """
     num_workers = get_config()['NUM_WORKERS']
+    delay_multiplier = get_config()['DELAY_MULTIPLIER']
 
     time0 = time.perf_counter()
     # get the sites
@@ -108,12 +109,18 @@ def run_aggregation(args: AggregationArgs) -> None:
     time_parallel_start = time.perf_counter()
     task_generator = TaskGenerator(sites, imts)
     num_jobs = 0
+    delay_width = 10
     log.info("starting %d calculations" % (len(sites) * len(imts)))
     for site, imt, location_bin in task_generator.task_generator():
+        if num_workers > 1:
+            delay = (num_jobs % delay_width) * delay_multiplier
+        else:
+            delay = 0
         task_args = AggTaskArgs(
             location_bin=location_bin,
             site=site,
             imt=imt,
+            delay=delay,
         )
         task_queue.put(task_args)
         num_jobs += 1

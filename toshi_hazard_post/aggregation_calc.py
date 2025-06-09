@@ -28,6 +28,7 @@ class AggTaskArgs:
     location_bin: 'CodedLocationBin'
     site: 'Site'
     imt: str
+    delay: float
 
 
 @dataclass
@@ -181,19 +182,13 @@ def calc_aggregation(task_args: AggTaskArgs, shared_args: AggSharedArgs, worker_
     Calculate hazard aggregation for a single site and imt and save result
 
     Parameters:
-        site: location, vs30 pair
-        imt: Intensity measure type (e.g. "PGA", "SA(1.5)")
-        agg_types: the aggregate statistics to be calculated (e.g., "mean", "0.5")
-        levels: IMTLs for the hazard curve
-        weights: weights for the branches of the logic tree
-        component_branches: list of the component branches that are combined to construct the full logic tree
-        branch_hash_table: composite branches represented as a list of hashes of the component branches
-        compatibility_key: the key identifying the hazard calculation compatibility entry
-        hazard_model_id: the id of the hazard model for storing results in the database
-
-    Returns:
-        exception: the raised exception if any part of the calculation fails
+        taks_args: The arguments fot the specific aggregation calculation.
+        shared_args: The arguments shared among all workers.
+        worker_name: The name of the parallel worker.
     """
+    log.info("worker %s sleeping for %f seconds" % (worker_name, task_args.delay))
+    time.sleep(task_args.delay)
+
     site = task_args.site
     imt = task_args.imt
     location_bin = task_args.location_bin

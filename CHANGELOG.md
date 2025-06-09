@@ -1,14 +1,19 @@
 # Changelog
 
+## [0.6.0] - 2025-06-06
+
+### Changed
+ - Use toshi-hazard-store v1 to retrieve realizations and store aggregate hazard
+
 ## [0.5.0] - 2025-03-24
 
 ### Changed
-  * calculation.imts and .agg_types settings are now optional.
-  * upstream nshm libraries updated to latest pypi releases.
-  * minor test fixes
-  * cli logging level is now INFO.
-  * update toshi-hazard-store to 0.9.1 pypi release.
-  * update pyarrow to allow all versions >=15.
+  - calculation.imts and .agg_types settings are now optional.
+  - upstream nshm libraries updated to latest pypi releases.
+  - minor test fixes
+  - cli logging level is now INFO.
+  - update toshi-hazard-store to 0.9.1 pypi release.
+  - update pyarrow to allow all versions >=15.
   
 ### Fixed
  - Composite branch weight bug
@@ -63,4 +68,4 @@
 
 ## [0.1.0] - 2022-07-20
 
-* First version
+- First version
