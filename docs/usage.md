@@ -4,8 +4,9 @@
 
 toshi-hazard-post requires some configuration to run. This can either be done via a environment variables and/or a configuration file. Environment variables will override settings in the configuration file.
 
-- THP_NUM_WORKERS: number of parallel processes to run (default: 1)
-- THP_{RLZ|AGG}_DIR: the path to the {realization or aggregate} datastore. Can be a local filepath or S3 URI
+- THP_{RLZ|AGG}_DIR: The path to the {realization or aggregate} datastore. Can be a local filepath or S3 URI.
+- THP_NUM_WORKERS: Number of parallel processes to run (default: 1).
+- THP_DELAY_MULTIPLIER: multiplier to apply to the delay of parallel workers. Parallel jobs are delayed by multiplier * mod(job_number, 10) to avoid too many simultaneous reads from the realization dataset.
 
 By default, toshi-hazard-post will look for a configuration file named `.env`, though you can specify a different file on the command line with the `---config-file` option.
 

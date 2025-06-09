@@ -27,4 +27,5 @@ def get_config():
         NUM_WORKERS=int(os.getenv('THP_NUM_WORKERS', DEFAULT_NUM_WORKERS)),
         RLZ_DIR=os.getenv('THP_RLZ_DIR'),
         AGG_DIR=os.getenv('THP_AGG_DIR'),
+        DELAY_MULTIPLIER=float(os.getenv('THP_DELAY_MULTIPLIER', 1.0)),
     )
