@@ -3,6 +3,7 @@ Primary functions for calculating an aggregation for a single, site, IMT, etc.
 """
 
 import logging
+import os
 import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Dict, List, Sequence
@@ -15,7 +16,6 @@ from toshi_hazard_post.data import load_realizations, save_aggregations
 if TYPE_CHECKING:
     import numpy.typing as npt
     import pandas as pd
-    from nzshm_common.location.coded_location import CodedLocationBin
 
     from toshi_hazard_post.aggregation_setup import Site
     from toshi_hazard_post.logic_tree import HazardComponentBranch
@@ -25,7 +25,6 @@ log = logging.getLogger(__name__)
 
 @dataclass
 class AggTaskArgs:
-    location_bin: 'CodedLocationBin'
     site: 'Site'
     imt: str
     delay: float
@@ -177,7 +176,7 @@ def create_component_dict(component_rates: 'pd.DataFrame') -> Dict[str, 'npt.NDA
     return component_rates['rates'].to_dict()
 
 
-def calc_aggregation(task_args: AggTaskArgs, shared_args: AggSharedArgs, worker_name: str) -> None:
+def calc_aggregation(task_args: AggTaskArgs, shared_args: AggSharedArgs) -> None:
     """
     Calculate hazard aggregation for a single site and imt and save result
 
@@ -186,12 +185,12 @@ def calc_aggregation(task_args: AggTaskArgs, shared_args: AggSharedArgs, worker_
         shared_args: The arguments shared among all workers.
         worker_name: The name of the parallel worker.
     """
+    worker_name = os.getpid()
     log.info("worker %s sleeping for %f seconds" % (worker_name, task_args.delay))
     time.sleep(task_args.delay)
 
     site = task_args.site
     imt = task_args.imt
-    location_bin = task_args.location_bin
 
     agg_types = shared_args.agg_types
     compatibility_key = shared_args.compatibility_key
@@ -207,7 +206,7 @@ def calc_aggregation(task_args: AggTaskArgs, shared_args: AggSharedArgs, worker_
     log.info("worker %s: loading realizations . . ." % (worker_name))
     time1 = time.perf_counter()
 
-    component_probs = load_realizations(imt, location, vs30, location_bin, component_branches, compatibility_key)
+    component_probs = load_realizations(imt, location, vs30, component_branches, compatibility_key)
     time2 = time.perf_counter()
     log.debug('worker %s: time to load realizations %0.2f seconds' % (worker_name, time2 - time1))
     log.debug("worker %s: %s rlz_table " % (worker_name, component_probs.shape))
@@ -245,5 +244,3 @@ def calc_aggregation(task_args: AggTaskArgs, shared_args: AggSharedArgs, worker_
     )
     log.info('worker %s time to perform one aggregation %0.2f seconds' % (worker_name, time7 - time0))
     # time.sleep(30)
-
-    return None

@@ -12,7 +12,6 @@ logging.getLogger('toshi_hazard_post').setLevel(logging.INFO)
 # logging.getLogger('toshi_hazard_post.aggregation').setLevel(logging.DEBUG)
 # logging.getLogger('toshi_hazard_post.aggregation_calc').setLevel(logging.DEBUG)
 # logging.getLogger('toshi_hazard_post.logic_tree').setLevel(logging.DEBUG)
-# logging.getLogger('toshi_hazard_post.parallel').setLevel(logging.DEBUG)
 logging.getLogger('toshi_hazard_post').setLevel(logging.INFO)
 
 

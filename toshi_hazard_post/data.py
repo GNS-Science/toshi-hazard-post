@@ -19,7 +19,7 @@ log = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     import numpy.typing as npt
-    from nzshm_common.location.coded_location import CodedLocation, CodedLocationBin
+    from nzshm_common.location.coded_location import CodedLocation
 
     from toshi_hazard_post.logic_tree import HazardComponentBranch
 
@@ -61,7 +61,7 @@ def save_aggregations(
     config = get_config()
 
     agg_dir, filesystem = pyarrow_dataset.configure_output(config['AGG_DIR'])
-    partitioning = ['vs30', 'imt', 'nloc_001']
+    partitioning = ['vs30', 'imt', 'nloc_0']
     pyarrow_aggr_dataset.append_models_to_dataset(
         models=generate_models(), base_dir=agg_dir, filesystem=filesystem, partitioning=partitioning
     )
@@ -95,7 +95,6 @@ def load_realizations(
     imt: str,
     location: 'CodedLocation',
     vs30: int,
-    location_bin: 'CodedLocationBin',
     component_branches: List['HazardComponentBranch'],
     compatibility_key: str,
 ) -> pd.DataFrame:
@@ -121,7 +120,7 @@ def load_realizations(
         (pc.field('compatible_calc_id') == pc.scalar(compatibility_key))
         & (pc.is_in(pc.field('sources_digest'), pa.array(sources_digests)))
         & (pc.is_in(pc.field('gmms_digest'), pa.array(gmms_digests)))
-        & (pc.field('nloc_0') == pc.scalar(location_bin.code))
+        & (pc.field('nloc_0') == pc.scalar(location.downsample(1.0).code))
         & (pc.field('nloc_001') == pc.scalar(location.downsample(0.001).code))
         & (pc.field('imt') == pc.scalar(imt))
         & (pc.field('vs30') == pc.scalar(vs30))

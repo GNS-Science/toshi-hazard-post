@@ -5,7 +5,8 @@ Module for coordinating and launching aggregation jobs.
 import logging
 import sys
 import time
-from typing import TYPE_CHECKING, Generator, List, Tuple, Union
+from concurrent.futures import ProcessPoolExecutor, as_completed
+from typing import TYPE_CHECKING, Generator, List, Tuple
 
 from nzshm_common.location.coded_location import bin_locations
 
@@ -14,12 +15,8 @@ from toshi_hazard_post.aggregation_calc import AggSharedArgs, AggTaskArgs, calc_
 from toshi_hazard_post.aggregation_setup import Site, get_logic_trees, get_sites
 from toshi_hazard_post.local_config import get_config
 from toshi_hazard_post.logic_tree import HazardLogicTree
-from toshi_hazard_post.parallel import setup_parallel
 
 if TYPE_CHECKING:
-    import multiprocessing
-    import queue
-
     from nzshm_common.location.coded_location import CodedLocationBin
 
 log = logging.getLogger(__name__)
@@ -102,53 +99,39 @@ def run_aggregation(args: AggregationArgs) -> None:
         skip_save=args.debug.skip_save,
     )
 
-    task_queue: Union['queue.Queue', 'multiprocessing.JoinableQueue']
-    result_queue: Union['queue.Queue', 'multiprocessing.Queue']
-    task_queue, result_queue = setup_parallel(num_workers, calc_aggregation, shared_args)
-
     time_parallel_start = time.perf_counter()
     task_generator = TaskGenerator(sites, imts)
     num_jobs = 0
     delay_width = 10
-    log.info("starting %d calculations" % (len(sites) * len(imts)))
-    for site, imt, location_bin in task_generator.task_generator():
-        if num_workers > 1:
-            delay = (num_jobs % delay_width) * delay_multiplier
-        else:
-            delay = 0
-        task_args = AggTaskArgs(
-            location_bin=location_bin,
-            site=site,
-            imt=imt,
-            delay=delay,
-        )
-        task_queue.put(task_args)
-        num_jobs += 1
-    total_jobs = num_jobs
+    log.info("starting %d calculations with %d workers" % (len(sites) * len(imts), num_workers))
 
-    # Add a poison pill for each to signal we've done everything
-    for i in range(num_workers):
-        task_queue.put(None)
+    futures = {}
+    with ProcessPoolExecutor(max_workers=num_workers) as executor:
+        for site, imt, location_bin in task_generator.task_generator():
+            if num_workers > 1:
+                delay = (num_jobs % delay_width) * delay_multiplier
+            else:
+                delay = 0
+            task_args = AggTaskArgs(
+                site=site,
+                imt=imt,
+                delay=delay,
+            )
+            num_jobs += 1
+            future = executor.submit(calc_aggregation, task_args, shared_args)
+            futures[future] = task_args
+        total_jobs = num_jobs
 
-    # Wait for all of the tasks to finish
-    task_queue.join()
+        num_failed = 0
+        for future in as_completed(futures.keys()):
+            if exception := future.exception():
+                num_failed += 1
+                print(f"Exception encountered for task args {futures[future]}: {repr(exception)}")
+
     time_parallel_end = time.perf_counter()
-
-    # TODO: catch exceptions and report trace
-    results: List[str] = []
-    while num_jobs:
-        result = result_queue.get()
-        results.append(result)
-        num_jobs -= 1
 
     time1 = time.perf_counter()
     log.info("time to perform parallel tasks %0.3f" % (time_parallel_end - time_parallel_start))
     log.info("processed %d calculations in %0.3f seconds" % (total_jobs, time1 - time0))
 
-    n_failed = len(list(filter(lambda s: 'FAILED' in s, results)))
-    if n_failed:
-        print("")
-        print(f"THERE ARE {n_failed} FAILED JOBS . . . ")
-        for result in results:
-            if 'FAILED' in result:
-                print(result)
+    print(f"THERE ARE {num_failed} FAILED JOBS . . . ")

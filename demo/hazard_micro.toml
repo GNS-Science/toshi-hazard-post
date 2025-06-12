@@ -1,5 +1,5 @@
 [general]
-compatibility_key = "NZSHM22-0"
+compatibility_key = "NZSHM22"
 hazard_model_id = "MICRO_DEMO_MODEL"
 
 [hazard_model]
@@ -12,14 +12,15 @@ gmcm_logic_tree = "gmcm_logic_tree_small.json"
 [site_params]
 vs30s = [275]
 # locations = ["WLG", "SRWG214", "-41.000~174.700", "myfile.csv"]
-locations = ["-34.500~173.000"]
+# locations = ["-34.500~173.000"]
 # locations = ["NZ"]
 # locations = ["MRO"]
+locations = ["WLG", "DUD", "AKL", "CHC"]
 
 # alternativly specify a file with locations and vs30 values
 # locations_file = "sites.csv"
 
 [calculation]
-#imts = ["PGA", "SA(1.0)"]
-imts = ["PGA"]
+imts = ["PGA", "SA(1.0)"]
+# imts = ["PGA"]
 agg_types = ["mean", "cov", "std", "0.005", "0.01", "0.025"]
