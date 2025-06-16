@@ -70,7 +70,7 @@ class HazardCompositeBranch:
         branches: the source-ground motion pairs that comprise the HazardCompositeBranch
     """
 
-    def __init__(self, branches: List[HazardComponentBranch], source_weight: float):
+    def __init__(self, branches: list[HazardComponentBranch], source_weight: float):
         self.branches = branches
 
         # to avoid double counting gmcm branches when calculating the weight we find the unique gmcm branches
@@ -118,11 +118,11 @@ class HazardLogicTree:
             lambda bs: bs.tectonic_region_type in self.trts, gmcm_logic_tree.branch_sets
         )
 
-        self._composite_branches: List[HazardCompositeBranch] = []
-        self._component_branches: List[HazardComponentBranch] = []
+        self._composite_branches: list[HazardCompositeBranch] = []
+        self._component_branches: list[HazardComponentBranch] = []
 
     @property
-    def composite_branches(self) -> List[HazardCompositeBranch]:
+    def composite_branches(self) -> list[HazardCompositeBranch]:
         """
         Get the composite branches combining the SRM branches with the appropraite GMCM branches by matching tectonic
         region type.
@@ -136,7 +136,7 @@ class HazardLogicTree:
         return self._composite_branches
 
     @property
-    def component_branches(self) -> List[HazardComponentBranch]:
+    def component_branches(self) -> list[HazardComponentBranch]:
         """
         Get the component branches (each SRM branch with all possible GMCM branch matches)
 
@@ -158,7 +158,7 @@ class HazardLogicTree:
         return np.array([branch.weight for branch in self.composite_branches])
 
     @property
-    def branch_hash_table(self) -> List[List[str]]:
+    def branch_hash_table(self) -> list[list[str]]:
         """
         The simplist structure used to iterate though the realization hashes. Each element of the list represents a
         composite branch as a list of hashes of the component branches that make up the composite branch.

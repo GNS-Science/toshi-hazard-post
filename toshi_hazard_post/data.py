@@ -83,7 +83,7 @@ def save_aggregations(
     location: 'CodedLocation',
     vs30: int,
     imt: str,
-    agg_types: List[str],
+    agg_types: list[str],
     hazard_model_id: str,
     compatability_key: str,
 ) -> None:
@@ -149,7 +149,7 @@ def get_realizations_dataset() -> ds.Dataset:
 #     imt: str,
 #     location: 'CodedLocation',
 #     vs30: int,
-#     component_branches: List['HazardComponentBranch'],
+#     component_branches: list['HazardComponentBranch'],
 #     compatibility_key: str,
 # ) -> pd.DataFrame:
 #     """

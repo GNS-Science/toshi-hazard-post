@@ -36,12 +36,12 @@ class AggTaskArgs:
 
 @dataclass
 class AggSharedArgs:
-    agg_types: List[str]
+    agg_types: list[str]
     compatibility_key: str
     hazard_model_id: str
     weights: 'npt.NDArray'
-    component_branches: List['HazardComponentBranch']
-    branch_hash_table: List[List[str]]
+    component_branches: list['HazardComponentBranch']
+    branch_hash_table: list[list[str]]
     skip_save: bool
 
 
@@ -119,7 +119,7 @@ def calculate_aggs(branch_rates: 'npt.NDArray', weights: 'npt.NDArray', agg_type
 
 
 def calc_composite_rates(
-    branch_hashes: List[str], component_rates: Dict[str, 'npt.NDArray'], nlevels: int
+    branch_hashes: list[str], component_rates: Dict[str, 'npt.NDArray'], nlevels: int
 ) -> 'npt.NDArray':
     """
     Calculate the rate for a single composite branch of the logic tree by summing rates of the component branches
@@ -158,7 +158,7 @@ def calc_composite_rates(
     # return rates.sum(axis=0)
 
 
-def build_branch_rates(branch_hash_table: List[List[str]], component_rates: Dict[str, 'npt.NDArray']) -> 'npt.NDArray':
+def build_branch_rates(branch_hash_table: list[list[str]], component_rates: Dict[str, 'npt.NDArray']) -> 'npt.NDArray':
     """
     Calculate the rate for the composite branches in the logic tree (all combination of SRM branch sets and applicable
     GMCM models).

@@ -76,7 +76,7 @@ def cov(mean: 'npt.NDArray', std: 'npt.NDArray') -> 'npt.NDArray':
 
 
 def weighted_quantiles(
-    values: 'npt.NDArray', weights: 'npt.NDArray', quantiles: Union[List[float], 'npt.NDArray']
+    values: 'npt.NDArray', weights: 'npt.NDArray', quantiles: Union[list[float], 'npt.NDArray']
 ) -> 'npt.NDArray':
     """Calculate weighted quantiles of array
 
