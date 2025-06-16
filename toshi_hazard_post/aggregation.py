@@ -36,7 +36,7 @@ PARTITION_RESOLUTION = 1.0
 
 
 # TODO:
-# - [x] hanlde locations file
+# - [ ] hanlde locations file
 # - [x] check that the correct number of records are returned
 # - [x] add timing and better memeory log messages
 # - [x] review all log messages, enusre correct level and placement
@@ -53,8 +53,7 @@ def log_memory(state):
 
 
 def generate_agg_jobs(
-    locations: list['CodedLocation'],
-    vs30s: list[int],
+    sites: list[Site],
     imts: list[str],
     compatibility_key: str,
     component_branches: list['HazardComponentBranch'],
@@ -63,13 +62,18 @@ def generate_agg_jobs(
     gmms_digests = [branch.gmcm_hash_digest for branch in component_branches]
     sources_digests = [branch.source_hash_digest for branch in component_branches]
     n_expected = len(component_branches)
-    location_bins = bin_locations(locations, PARTITION_RESOLUTION)
+
+    # group locations by vs30
+    vs30s_unique = set([site.vs30 for site in sites])
+
     log.info(
-        "creating %d batches from %d vs30s and %d location bins"
-        % (len(location_bins) * len(vs30s), len(vs30s), len(location_bins))
+        "creating batches from %s sites and %s vs30s"
+        % (len(sites), len(vs30s_unique))
     )
     log_memory("start generate")
-    for vs30 in vs30s:
+    for vs30 in vs30s_unique:
+        locations = [site.location for site in sites if site.vs30 == vs30]
+        location_bins = bin_locations(locations, PARTITION_RESOLUTION)
         for nloc_0, location_bin in location_bins.items():
             log.info("batch %d, %s" % (vs30, nloc_0))
             log_memory("got dataset")
@@ -147,13 +151,11 @@ def run_aggregation(args: AggregationArgs) -> None:
     log.info("starting %d calculations with %d workers" % (len(sites) * len(imts), num_workers))
 
     futures = {}
-    locations = get_locations(args.site_params.locations)
     ds1 = get_realizations_dataset()
     with ProcessPoolExecutor(max_workers=num_workers) as executor:
         # TODO: add locations file
         for vs30, location, imt, filepath in generate_agg_jobs(
-            locations,
-            args.site_params.vs30s,
+            sites,
             imts,
             args.general.compatibility_key,
             component_branches,

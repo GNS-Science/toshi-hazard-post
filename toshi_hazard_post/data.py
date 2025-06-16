@@ -33,6 +33,7 @@ def get_batch_table(
     vs30: int,
     imts: list[str],
 ) -> pa.Table:
+    t0 = time.perf_counter()
     columns = ['nloc_001', 'imt', 'sources_digest', 'gmms_digest', 'values']
     flt = (
         (pc.field('compatible_calc_id') == pc.scalar(compatibility_key))
@@ -42,10 +43,9 @@ def get_batch_table(
         & (pc.field('vs30') == pc.scalar(vs30))
         & (pc.is_in(pc.field('imt'), pa.array(imts)))
     )
-    t0 = time.perf_counter()
     batch_datatable = dataset.to_table(columns=columns, filter=flt)
     t1 = time.perf_counter()
-    log.info("time to create data table 1: %0.1f seconds" % (t1 - t0))
+    log.info("time to create batch table: %0.1f seconds" % (t1 - t0))
     return batch_datatable
 
 
@@ -57,8 +57,6 @@ def get_job_datatable(
 ) -> pa.Table:
     t0 = time.perf_counter()
     table = batch_datatable.filter((pc.field("imt") == imt) & (pc.field("nloc_001") == location.downsample(0.001).code))
-    t1 = time.perf_counter()
-    log.info("time to create job data table 2: %0.5f seconds" % (t1 - t0))
     table = pa.table(
         {
             "sources_digest": table['sources_digest'].to_pylist(),
@@ -66,7 +64,6 @@ def get_job_datatable(
             "values": table['values'],
         }
     )
-    t2 = time.perf_counter()
 
     if len(table) == 0:
         raise Exception(f"no records found for location: {location}, imt: {imt}")
@@ -74,7 +71,8 @@ def get_job_datatable(
         msg = f"incorrect number of records found for location: {location}, imt: {imt}. Expected {n_expected}, got {len(table)}"
         raise Exception(msg)
 
-    log.info("time to create final job data table: %0.5f seconds" % (t2 - t1))
+    t1 = time.perf_counter()
+    log.info("time to create job table: %0.5f seconds" % (t1 - t0))
     return table
 
 
