@@ -3,14 +3,14 @@ Primary functions for calculating an aggregation for a single, site, IMT, etc.
 """
 
 import logging
-import pyarrow.orc as orc
 import os
 import time
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Dict, List, Sequence
 from pathlib import Path
+from typing import TYPE_CHECKING, Dict, List, Sequence
 
 import numpy as np
+import pyarrow.orc as orc
 
 import toshi_hazard_post.calculators as calculators
 from toshi_hazard_post.data import save_aggregations
@@ -18,6 +18,7 @@ from toshi_hazard_post.data import save_aggregations
 if TYPE_CHECKING:
     import numpy.typing as npt
     import pandas as pd
+    from nzshm_common.location import CodedLocation
 
     from toshi_hazard_post.aggregation_setup import Site
     from toshi_hazard_post.logic_tree import HazardComponentBranch
@@ -27,9 +28,10 @@ log = logging.getLogger(__name__)
 
 @dataclass
 class AggTaskArgs:
-    site: 'Site'
+    location: 'CodedLocation'
+    vs30: int
     imt: str
-    filepath: Path
+    table_filepath: Path
 
 
 @dataclass
@@ -51,9 +53,10 @@ def convert_probs_to_rates(probs: 'pd.DataFrame') -> 'pd.DataFrame':
     return probs.drop('values', axis=1)
 
 
-def load_realizations(filepath: Path):
+def load_realizations(filepath: Path) -> 'pd.DataFrame':
     data_table = orc.read_table(filepath)
     return data_table.to_pandas()
+
 
 def calculate_aggs(branch_rates: 'npt.NDArray', weights: 'npt.NDArray', agg_types: Sequence[str]) -> 'npt.NDArray':
     """
@@ -191,51 +194,44 @@ def calc_aggregation(task_args: AggTaskArgs, shared_args: AggSharedArgs) -> None
         shared_args: The arguments shared among all workers.
         worker_name: The name of the parallel worker.
     """
-    log.info("working on %s", task_args.filepath)
+    time0 = time.perf_counter()
     worker_name = os.getpid()
 
-    site = task_args.site
+    location = task_args.location
+    vs30 = task_args.vs30
     imt = task_args.imt
 
     agg_types = shared_args.agg_types
     compatibility_key = shared_args.compatibility_key
     hazard_model_id = shared_args.hazard_model_id
     weights = shared_args.weights
-    component_branches = shared_args.component_branches
     branch_hash_table = shared_args.branch_hash_table
 
-    time0 = time.perf_counter()
-    location = site.location
-    vs30 = site.vs30
-
-    log.info("worker %s: loading realizations . . ." % (worker_name))
-    time1 = time.perf_counter()
-
-    component_probs = load_realizations(task_args.filepath)
-    time2 = time.perf_counter()
-    log.debug('worker %s: time to load realizations %0.2f seconds' % (worker_name, time2 - time1))
+    log.info("worker %s: loading realizations from %s. . ." % (worker_name, task_args.table_filepath))
+    component_probs = load_realizations(task_args.table_filepath)
     log.debug("worker %s: %s rlz_table " % (worker_name, component_probs.shape))
 
     # convert probabilities to rates
+    time1 = time.perf_counter()
     component_rates = convert_probs_to_rates(component_probs)
     del component_probs
-    time3 = time.perf_counter()
-    log.debug('worker %s: time to convert_probs_to_rates() % 0.2f' % (worker_name, time3 - time2))
+    time2 = time.perf_counter()
+    log.debug('worker %s: time to convert_probs_to_rates() % 0.2f' % (worker_name, time2 - time1))
 
     component_rates = create_component_dict(component_rates)
 
-    time4 = time.perf_counter()
-    log.debug('worker %s: time to convert to dict and set digest index %0.2f seconds' % (worker_name, time4 - time3))
+    time3 = time.perf_counter()
+    log.debug('worker %s: time to convert to dict and set digest index %0.2f seconds' % (worker_name, time3 - time2))
     log.debug('worker %s: rates_table %d' % (worker_name, len(component_rates)))
 
     composite_rates = build_branch_rates(branch_hash_table, component_rates)
-    time5 = time.perf_counter()
-    log.debug('worker %s: time to build_ranch_rates %0.2f seconds' % (worker_name, time5 - time4))
+    time4 = time.perf_counter()
+    log.debug('worker %s: time to build_ranch_rates %0.2f seconds' % (worker_name, time4 - time3))
 
     log.info("worker %s:  calculating aggregates . . . " % worker_name)
     hazard = calculate_aggs(composite_rates, weights, agg_types)
-    time6 = time.perf_counter()
-    log.debug('worker %s: time to calculate aggs %0.2f seconds' % (worker_name, time6 - time5))
+    time5 = time.perf_counter()
+    log.debug('worker %s: time to calculate aggs %0.2f seconds' % (worker_name, time5 - time4))
 
     probs = calculators.rate_to_prob(hazard, 1.0)
     if shared_args.skip_save:
@@ -243,11 +239,6 @@ def calc_aggregation(task_args: AggTaskArgs, shared_args: AggSharedArgs) -> None
     else:
         log.info("worker %s saving result . . . " % worker_name)
         save_aggregations(probs, location, vs30, imt, agg_types, hazard_model_id, compatibility_key)
-    time7 = time.perf_counter()
-    log.info(
-        'worker %s time to perform one aggregation after loading data %0.2f seconds' % (worker_name, time7 - time2)
-    )
-    log.info('worker %s time to perform one aggregation %0.2f seconds' % (worker_name, time7 - time0))
-
-    task_args.filepath.unlink()
-    # time.sleep(30)
+    task_args.table_filepath.unlink()
+    time6 = time.perf_counter()
+    log.info('worker %s time to perform one aggregation %0.2f seconds' % (worker_name, time6 - time0))

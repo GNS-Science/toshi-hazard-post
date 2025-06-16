@@ -2,141 +2,93 @@
 Module for coordinating and launching aggregation jobs.
 """
 
-import logging
-from pathlib import Path
 import itertools
+import logging
 import sys
 import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
-from typing import TYPE_CHECKING, Generator, List, Tuple
+from pathlib import Path
+from typing import TYPE_CHECKING, Generator
 
-import pyarrow as pa
-import pyarrow.dataset as ds
-import pyarrow.parquet as pq
+import psutil
 import pyarrow.orc as orc
-import pyarrow.compute as pc
-import itertools
-import datetime as dt
-
-from nzshm_common.location.coded_location import bin_locations
 from nzshm_common.location import get_locations
+from nzshm_common.location.coded_location import bin_locations
 
 from toshi_hazard_post.aggregation_args import AggregationArgs
 from toshi_hazard_post.aggregation_calc import AggSharedArgs, AggTaskArgs, calc_aggregation
 from toshi_hazard_post.aggregation_setup import Site, get_logic_trees, get_sites
+from toshi_hazard_post.data import get_batch_table, get_job_datatable, get_realizations_dataset
 from toshi_hazard_post.local_config import get_config
 from toshi_hazard_post.logic_tree import HazardLogicTree
-from toshi_hazard_post.data import get_realizations_dataset
 
 if TYPE_CHECKING:
-    from nzshm_common.location import CodedLocation, CodedLocationBin
+    from nzshm_common.location import CodedLocation
+    import pyarrow.dataset as ds
+
     from toshi_hazard_post.logic_tree import HazardComponentBranch
 
 
 log = logging.getLogger(__name__)
 
 PARTITION_RESOLUTION = 1.0
-import psutil
-process = psutil.Process()
 
-WORKING = Path("/tmp")
 
-def log_memory(state):
-    log.info('memory use at state "%s": %d MB' % (state, process.memory_info().rss / 1024 ** 2))
 
 # TODO:
-# - [ ] hanlde locations file
+# - [x] hanlde locations file
 # - [x] check that the correct number of records are returned
 # - [x] add timing and better memeory log messages
-# - [ ] review all log messages, enusre correct level and placement
-# - [ ] make sure resultion is correct when a coded location is used
-# - [ ] organize into correct modules
+# - [x] review all log messages, enusre correct level and placement
+# - [x] make sure resultion is correct when a coded location is used
+# - [x] organize into correct modules
+# - [ ] test coverage
+# - [x] WORKING dir can be set
+
+process = psutil.Process()
+
+
+def log_memory(state):
+    log.debug('memory use at state "%s": %d MB' % (state, process.memory_info().rss / 1024**2))
+
+
 def generate_agg_jobs(
     locations: list['CodedLocation'],
     vs30s: list[int],
     imts: list[str],
     compatibility_key: str,
     component_branches: list['HazardComponentBranch'],
-    dataset: ds.Dataset,
-):
+    dataset: 'ds.Dataset',
+) -> Generator[tuple[int, 'CodedLocation', str, Path], None, None]:
     gmms_digests = [branch.gmcm_hash_digest for branch in component_branches]
     sources_digests = [branch.source_hash_digest for branch in component_branches]
+    n_expected = len(component_branches)
     location_bins = bin_locations(locations, PARTITION_RESOLUTION)
-    log.info("creating %d batches from %d vs30s and %d location bins" % (len(location_bins) * len(vs30s), len(vs30s), len(location_bins)))
+    log.info(
+        "creating %d batches from %d vs30s and %d location bins"
+        % (len(location_bins) * len(vs30s), len(vs30s), len(location_bins))
+    )
     log_memory("start generate")
     for vs30 in vs30s:
         for nloc_0, location_bin in location_bins.items():
             log.info("batch %d, %s" % (vs30, nloc_0))
             log_memory("got dataset")
-            columns = ['nloc_001', 'imt', 'sources_digest', 'gmms_digest', 'values']
-            flt = (
-                (pc.field('compatible_calc_id') == pc.scalar(compatibility_key))
-                & (pc.is_in(pc.field('sources_digest'), pa.array(sources_digests)))
-                & (pc.is_in(pc.field('gmms_digest'), pa.array(gmms_digests)))
-                & (pc.field('nloc_0') == pc.scalar(nloc_0))
-                & (pc.field('vs30') == pc.scalar(vs30))
-                & (pc.is_in(pc.field('imt'), pa.array(imts)))
+            batch_datatable = get_batch_table(
+                dataset, compatibility_key, sources_digests, gmms_digests, nloc_0, vs30, imts
             )
-            t0 = time.perf_counter()
-            dt1 = dataset.to_table(columns=columns, filter=flt)
-            t1 = time.perf_counter()
-            log.info("time to create data table 1: %0.1f seconds" % (t1-t0))
-            log_memory("table 1")
+            log_memory("batch datatable")
 
-            for (location, imt) in itertools.product(location_bin.locations, imts):
-                t2 = time.perf_counter()
-                dt2 = dt1.filter((pc.field("imt")==imt) & (pc.field("nloc_001") == location.downsample(0.001).code))
-                t3 = time.perf_counter()
-                log_memory("table 2")
-                log.info("time to create data table 2: %0.5f seconds" % (t3-t2))
-                t4 = time.perf_counter()
-                table = pa.table({
-                    "sources_digest": dt2['sources_digest'].to_pylist(),
-                    "gmms_digest": dt2['gmms_digest'].to_pylist(),
-                    "values":  dt2['values']
-                })
-
-                if len(table) == 0:
-                    raise Exception(f"no records found for location: {location}, imt: {imt}")
-                if len(table) != len(component_branches):
-                    msg = f"incorrect number of records found for location: {location}, imt: {imt}. Expected {len(component_branches)}, got {len(table)}"
-                    raise Exception(msg)
-
-                t5 = time.perf_counter()
-                log_memory("final table")
-                log.info("time to create final data table: %0.5f seconds" % (t5-t4))
-                filepath = WORKING / f"{vs30}_{nloc_0}_{location.downsample(0.001).code}_{imt}_dataset.dat"
-                log.info("writing file %s for agg job %s, %s" % (filepath, location.code, imt))
-                t6 = time.perf_counter()
-                orc.write_table(table, filepath, compression='snappy')
-                t7 = time.perf_counter()
-                log.info("time to write data: %0.5f seconds" % (t7-t6))
+            for location, imt in itertools.product(location_bin.locations, imts):
+                job_datatable = get_job_datatable(batch_datatable, location, imt, n_expected)
+                log_memory("job datatable")
+                working_dir = get_config()['WORKING_DIR']
+                filepath = working_dir / f"{vs30}_{nloc_0}_{location.downsample(0.001).code}_{imt}_dataset.dat"
+                log.debug("writing file %s for agg job %s, %s" % (filepath, location.code, imt))
+                t0 = time.perf_counter()
+                orc.write_table(job_datatable, filepath, compression='snappy')
+                t1 = time.perf_counter()
+                log.debug("time to write data: %0.5f seconds" % (t1 - t0))
                 yield vs30, location, imt, filepath
-
-
-
-
-# class TaskGenerator:
-#     def __init__(
-#         self,
-#         sites: List[Site],
-#         imts: List[str],
-#     ):
-#         self.imts = imts
-#         self.locations = [site.location for site in sites]
-#         self.vs30s = [site.vs30 for site in sites]
-
-#     def task_generator(self) -> Generator[Tuple[Site, str, 'CodedLocationBin'], None, None]:
-#         for imt in self.imts:
-#             locations_tmp = self.locations.copy()
-#             vs30s_tmp = self.vs30s.copy()
-#             for location_bin in bin_locations(self.locations, PARTITION_RESOLUTION).values():
-#                 for location in location_bin:
-#                     idx = locations_tmp.index(location)
-#                     locations_tmp.pop(idx)
-#                     vs30 = vs30s_tmp.pop(idx)
-#                     site = Site(location=location, vs30=vs30)
-#                     yield site, imt, location_bin
 
 
 def run_aggregation(args: AggregationArgs) -> None:
@@ -147,7 +99,6 @@ def run_aggregation(args: AggregationArgs) -> None:
         config: the aggregation configuration
     """
     num_workers = get_config()['NUM_WORKERS']
-    delay_multiplier = get_config()['DELAY_MULTIPLIER']
 
     time0 = time.perf_counter()
     # get the sites
@@ -192,9 +143,7 @@ def run_aggregation(args: AggregationArgs) -> None:
     )
 
     time_parallel_start = time.perf_counter()
-    # task_generator = TaskGenerator(sites, imts)
     num_jobs = 0
-    delay_width = 10
     log.info("starting %d calculations with %d workers" % (len(sites) * len(imts), num_workers))
 
     futures = {}
@@ -210,11 +159,11 @@ def run_aggregation(args: AggregationArgs) -> None:
             component_branches,
             ds1,
         ):
-            site = Site(location=location, vs30=vs30)
             task_args = AggTaskArgs(
-                site=site,
+                location=location,
+                vs30=vs30,
                 imt=imt,
-                filepath=filepath,
+                table_filepath=filepath,
             )
             future = executor.submit(calc_aggregation, task_args, shared_args)
             futures[future] = task_args
@@ -226,33 +175,10 @@ def run_aggregation(args: AggregationArgs) -> None:
                 num_failed += 1
                 log.error("Exception encountered for task args %s: %s" % (futures[future], repr(exception)))
 
-    # futures = {}
-    # with ProcessPoolExecutor(max_workers=num_workers) as executor:
-        # for site, imt, location_bin in task_generator.task_generator():
-    #         if num_workers > 1:
-    #             delay = (num_jobs % delay_width) * delay_multiplier
-    #         else:
-    #             delay = 0
-    #         task_args = AggTaskArgs(
-    #             site=site,
-    #             imt=imt,
-    #             delay=delay,
-    #         )
-    #         num_jobs += 1
-    #         future = executor.submit(calc_aggregation, task_args, shared_args)
-    #         futures[future] = task_args
-    #     total_jobs = num_jobs
-
-    #     num_failed = 0
-    #     for future in as_completed(futures.keys()):
-    #         if exception := future.exception():
-    #             num_failed += 1
-    #             print(f"Exception encountered for task args {futures[future]}: {repr(exception)}")
-
     time_parallel_end = time.perf_counter()
 
     time1 = time.perf_counter()
-    log.info("time to perform parallel tasks %0.3f" % (time_parallel_end - time_parallel_start))
-    log.info("processed %d calculations in %0.3f seconds" % (num_jobs, time1 - time0))
+    log.info("total time: processed %d calculations in %0.3f seconds" % (num_jobs, time1 - time0))
+    log.info("time to perform aggregations after job setup %0.3f" % (time_parallel_end - time_parallel_start))
 
     print(f"THERE ARE {num_failed} FAILED JOBS . . . ")
