@@ -3,15 +3,17 @@ Primary functions for calculating an aggregation for a single, site, IMT, etc.
 """
 
 import logging
+import pyarrow.orc as orc
 import os
 import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Dict, List, Sequence
+from pathlib import Path
 
 import numpy as np
 
 import toshi_hazard_post.calculators as calculators
-from toshi_hazard_post.data import load_realizations, save_aggregations
+from toshi_hazard_post.data import save_aggregations
 
 if TYPE_CHECKING:
     import numpy.typing as npt
@@ -27,7 +29,7 @@ log = logging.getLogger(__name__)
 class AggTaskArgs:
     site: 'Site'
     imt: str
-    delay: float
+    filepath: Path
 
 
 @dataclass
@@ -48,6 +50,10 @@ def convert_probs_to_rates(probs: 'pd.DataFrame') -> 'pd.DataFrame':
     probs['rates'] = probs['values'].apply(calculators.prob_to_rate, inv_time=1.0)
     return probs.drop('values', axis=1)
 
+
+def load_realizations(filepath: Path):
+    data_table = orc.read_table(filepath)
+    return data_table.to_pandas()
 
 def calculate_aggs(branch_rates: 'npt.NDArray', weights: 'npt.NDArray', agg_types: Sequence[str]) -> 'npt.NDArray':
     """
@@ -185,9 +191,8 @@ def calc_aggregation(task_args: AggTaskArgs, shared_args: AggSharedArgs) -> None
         shared_args: The arguments shared among all workers.
         worker_name: The name of the parallel worker.
     """
+    log.info("working on %s", task_args.filepath)
     worker_name = os.getpid()
-    log.info("worker %s sleeping for %f seconds" % (worker_name, task_args.delay))
-    time.sleep(task_args.delay)
 
     site = task_args.site
     imt = task_args.imt
@@ -206,7 +211,7 @@ def calc_aggregation(task_args: AggTaskArgs, shared_args: AggSharedArgs) -> None
     log.info("worker %s: loading realizations . . ." % (worker_name))
     time1 = time.perf_counter()
 
-    component_probs = load_realizations(imt, location, vs30, component_branches, compatibility_key)
+    component_probs = load_realizations(task_args.filepath)
     time2 = time.perf_counter()
     log.debug('worker %s: time to load realizations %0.2f seconds' % (worker_name, time2 - time1))
     log.debug("worker %s: %s rlz_table " % (worker_name, component_probs.shape))
@@ -243,4 +248,6 @@ def calc_aggregation(task_args: AggTaskArgs, shared_args: AggSharedArgs) -> None
         'worker %s time to perform one aggregation after loading data %0.2f seconds' % (worker_name, time7 - time2)
     )
     log.info('worker %s time to perform one aggregation %0.2f seconds' % (worker_name, time7 - time0))
+
+    task_args.filepath.unlink()
     # time.sleep(30)
