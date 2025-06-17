@@ -124,21 +124,19 @@ def test_agg_types(branch_rates, agg_types):
     hazard_agg = aggregation_calc.calculate_aggs(branch_rates, weights, agg_types)
     assert hazard_agg.shape == (len(agg_types), branch_rates.shape[1])
 
+
 def test_convert_p2r():
-    d = {'values': [np.array([1,1,1]), np.array([0,0,0])]}
+    d = {'values': [np.array([1, 1, 1]), np.array([0, 0, 0])]}
     df_in = pd.DataFrame(d)
     df_out = aggregation_calc.convert_probs_to_rates(df_in)
 
     assert all(df_out.columns == ['rates'])
     assert all(df_out.loc[0]['rates'] == [np.inf, np.inf, np.inf])
-    assert all(df_out.loc[1]['rates'] == [0,0,0])
+    assert all(df_out.loc[1]['rates'] == [0, 0, 0])
+
 
 def test_component_dict():
-    d = {
-        'sources_digest':['abc', 'def'],
-        'gmms_digest':['123','456'],
-        'rates':[1, 2]
-    }
+    d = {'sources_digest': ['abc', 'def'], 'gmms_digest': ['123', '456'], 'rates': [1, 2]}
     df = pd.DataFrame(d)
 
     component_dict = aggregation_calc.create_component_dict(df)

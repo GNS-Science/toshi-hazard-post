@@ -146,6 +146,7 @@ def test_default_imts():
     agg_args = AggregationArgs(**config)
     assert agg_args.calculation.imts == [imt for imt in IntensityMeasureTypeEnum]
 
+
 def test_default_aggs():
     config = get_config()
     del config['calculation']['agg_types']
