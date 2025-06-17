@@ -2,13 +2,13 @@
 Primary functions for calculating an aggregation for a single, site, IMT, etc.
 """
 
-from multiprocessing import shared_memory
 import logging
 import os
 import time
 from dataclasses import dataclass
+from multiprocessing import shared_memory
 from pathlib import Path
-from typing import TYPE_CHECKING, Dict, List, Sequence
+from typing import TYPE_CHECKING, Dict, Sequence
 
 import numpy as np
 import pyarrow.orc as orc
@@ -21,9 +21,6 @@ if TYPE_CHECKING:
     import numpy.typing as npt
     import pandas as pd
     from nzshm_common.location import CodedLocation
-
-    from toshi_hazard_post.aggregation_setup import Site
-    from toshi_hazard_post.logic_tree import HazardComponentBranch
 
 log = logging.getLogger(__name__)
 
@@ -41,8 +38,8 @@ class AggSharedArgs:
     agg_types: list[str]
     compatibility_key: str
     hazard_model_id: str
-    weights_shape: tuple[int]
-    branch_hash_table_shape: tuple[int]
+    weights_shape: tuple[int, ...]
+    branch_hash_table_shape: tuple[int, ...]
     skip_save: bool
 
 
@@ -159,7 +156,7 @@ def calc_composite_rates(
     # return rates.sum(axis=0)
 
 
-def build_branch_rates(branch_hash_table: list[list[str]], component_rates: Dict[str, 'npt.NDArray']) -> 'npt.NDArray':
+def build_branch_rates(branch_hash_table: 'npt.NDArray', component_rates: Dict[str, 'npt.NDArray']) -> 'npt.NDArray':
     """
     Calculate the rate for the composite branches in the logic tree (all combination of SRM branch sets and applicable
     GMCM models).
@@ -207,10 +204,12 @@ def calc_aggregation(task_args: AggTaskArgs, shared_args: AggSharedArgs) -> None
     hazard_model_id = shared_args.hazard_model_id
 
     branch_hash_table_shm = shared_memory.SharedMemory(name=constants.BRANCH_HASH_TABLE_SHM_NAME)
-    branch_hash_table = np.ndarray(shared_args.branch_hash_table_shape, dtype='<U24', buffer=branch_hash_table_shm.buf)
+    branch_hash_table: 'npt.NDArray' = np.ndarray(
+        shared_args.branch_hash_table_shape, dtype='<U24', buffer=branch_hash_table_shm.buf
+    )
 
     weights_shm = shared_memory.SharedMemory(name=constants.WEIGHTS_SHM_NAME)
-    weights = np.ndarray(shared_args.weights_shape, dtype=np.float64, buffer=weights_shm.buf)
+    weights: 'npt.NDArray' = np.ndarray(shared_args.weights_shape, dtype=np.float64, buffer=weights_shm.buf)
 
     log.info("worker %s: loading realizations from %s. . ." % (worker_name, task_args.table_filepath))
     component_probs = load_realizations(task_args.table_filepath)

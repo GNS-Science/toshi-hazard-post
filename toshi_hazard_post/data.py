@@ -4,9 +4,8 @@ Functions for loading realizations and saving aggregations
 
 import logging
 import time
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING
 
-import pandas as pd
 import pyarrow as pa
 import pyarrow.compute as pc
 import pyarrow.dataset as ds
@@ -20,8 +19,6 @@ log = logging.getLogger(__name__)
 if TYPE_CHECKING:
     import numpy.typing as npt
     from nzshm_common.location.coded_location import CodedLocation
-
-    from toshi_hazard_post.logic_tree import HazardComponentBranch
 
 
 def get_batch_table(
@@ -68,7 +65,10 @@ def get_job_datatable(
     if len(table) == 0:
         raise Exception(f"no records found for location: {location}, imt: {imt}")
     if len(table) != n_expected:
-        msg = f"incorrect number of records found for location: {location}, imt: {imt}. Expected {n_expected}, got {len(table)}"
+        msg = (
+            f"incorrect number of records found for location: "
+            f"{location}, imt: {imt}. Expected {n_expected}, got {len(table)}"
+        )
         raise Exception(msg)
 
     t1 = time.perf_counter()

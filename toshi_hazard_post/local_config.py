@@ -30,8 +30,8 @@ def get_config() -> dict[str, Any]:
         NUM_WORKERS=int(os.getenv('THP_NUM_WORKERS', DEFAULT_NUM_WORKERS)),
         RLZ_DIR=os.getenv('THP_RLZ_DIR'),
         AGG_DIR=os.getenv('THP_AGG_DIR'),
-        WORKING_DIR=Path(os.getenv('THP_WORKING_DIR', '/tmp')).expanduser()
+        WORKING_DIR=Path(os.getenv('THP_WORKING_DIR', '/tmp')).expanduser(),
     )
-    if not config['WORKING_DIR'].is_dir():
+    if not config['WORKING_DIR'].is_dir():  # type: ignore
         raise FileNotFoundError(f"WORKING_DIR {config['WORKING_DIR']} is not a directory")
     return config

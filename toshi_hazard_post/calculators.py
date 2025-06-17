@@ -1,7 +1,7 @@
 """A collection of calculation functions for hazard aggregation."""
 
 import logging
-from typing import TYPE_CHECKING, List, Tuple, Union
+from typing import TYPE_CHECKING, Tuple, Union
 
 import numpy as np
 from numba import jit

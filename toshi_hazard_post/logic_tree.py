@@ -6,7 +6,7 @@ import copy
 import logging
 import math
 from itertools import chain, product
-from typing import TYPE_CHECKING, List, Tuple
+from typing import TYPE_CHECKING, Tuple
 
 import numpy as np
 import nzshm_model.branch_registry

@@ -2,32 +2,32 @@
 Module for coordinating and launching aggregation jobs.
 """
 
-from multiprocessing import shared_memory
-import numpy as np
 import itertools
 import logging
 import sys
 import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
+from multiprocessing import shared_memory
 from pathlib import Path
 from typing import TYPE_CHECKING, Generator
 
+import numpy as np
 import psutil
 import pyarrow.orc as orc
-from nzshm_common.location import get_locations
 from nzshm_common.location.coded_location import bin_locations
 
+import toshi_hazard_post.constants as constants
 from toshi_hazard_post.aggregation_args import AggregationArgs
 from toshi_hazard_post.aggregation_calc import AggSharedArgs, AggTaskArgs, calc_aggregation
 from toshi_hazard_post.aggregation_setup import Site, get_logic_trees, get_sites
 from toshi_hazard_post.data import get_batch_table, get_job_datatable, get_realizations_dataset
 from toshi_hazard_post.local_config import get_config
 from toshi_hazard_post.logic_tree import HazardLogicTree
-import toshi_hazard_post.constants as constants
 
 if TYPE_CHECKING:
-    from nzshm_common.location import CodedLocation
+    import numpy.typing as npt
     import pyarrow.dataset as ds
+    from nzshm_common.location import CodedLocation
 
     from toshi_hazard_post.logic_tree import HazardComponentBranch
 
@@ -35,7 +35,6 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 PARTITION_RESOLUTION = 1.0
-
 
 
 # TODO:
@@ -69,10 +68,7 @@ def generate_agg_jobs(
     # group locations by vs30
     vs30s_unique = set([site.vs30 for site in sites])
 
-    log.info(
-        "creating batches from %s sites and %s vs30s"
-        % (len(sites), len(vs30s_unique))
-    )
+    log.info("creating batches from %s sites and %s vs30s" % (len(sites), len(vs30s_unique)))
     log_memory("start generate")
     for vs30 in vs30s_unique:
         locations = [site.location for site in sites if site.vs30 == vs30]
@@ -124,7 +120,7 @@ def run_aggregation(args: AggregationArgs) -> None:
     log.info("calculating weights and branch hash table . . . ")
     tic = time.perf_counter()
     weights = logic_tree.weights
-    branch_hash_table = logic_tree.branch_hash_table
+    branch_hash_table: list | 'npt.NDArray' = logic_tree.branch_hash_table
     toc = time.perf_counter()
 
     log.info('time to build weight array and hash table %0.2f seconds' % (toc - tic))
@@ -142,11 +138,15 @@ def run_aggregation(args: AggregationArgs) -> None:
 
     weights_shm = shared_memory.SharedMemory(name=constants.WEIGHTS_SHM_NAME, create=True, size=weights.nbytes)
     branch_hash_table = np.array(branch_hash_table)
-    branch_hash_table_shm = shared_memory.SharedMemory(name=constants.BRANCH_HASH_TABLE_SHM_NAME, create=True, size=branch_hash_table.nbytes)
+    branch_hash_table_shm = shared_memory.SharedMemory(
+        name=constants.BRANCH_HASH_TABLE_SHM_NAME, create=True, size=branch_hash_table.nbytes
+    )
 
-    bht = np.ndarray(branch_hash_table.shape, dtype=branch_hash_table.dtype, buffer=branch_hash_table_shm.buf)
+    bht: 'npt.NDArray' = np.ndarray(
+        branch_hash_table.shape, dtype=branch_hash_table.dtype, buffer=branch_hash_table_shm.buf
+    )
     bht[:] = branch_hash_table[:]
-    wgt = np.ndarray(weights.shape, dtype=weights.dtype, buffer=weights_shm.buf)
+    wgt: 'npt.NDArray' = np.ndarray(weights.shape, dtype=weights.dtype, buffer=weights_shm.buf)
     wgt[:] = weights[:]
 
     shared_args = AggSharedArgs(
