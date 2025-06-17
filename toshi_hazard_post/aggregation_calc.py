@@ -18,9 +18,9 @@ import toshi_hazard_post.constants as constants
 from toshi_hazard_post.data import save_aggregations
 
 if TYPE_CHECKING:
-    import numpy.typing as npt
-    import pandas as pd
-    from nzshm_common.location import CodedLocation
+    import numpy.typing as npt  # pragma: no cover
+    import pandas as pd  # pragma: no cover
+    from nzshm_common.location import CodedLocation  # pragma: no cover
 
 log = logging.getLogger(__name__)
 

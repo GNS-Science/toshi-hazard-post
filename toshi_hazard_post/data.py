@@ -17,8 +17,8 @@ from toshi_hazard_post.local_config import get_config
 log = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
-    import numpy.typing as npt
-    from nzshm_common.location.coded_location import CodedLocation
+    import numpy.typing as npt  # pragma: no cover
+    from nzshm_common.location.coded_location import CodedLocation  # pragma: no cover
 
 
 def get_batch_table(
@@ -141,60 +141,3 @@ def get_realizations_dataset() -> ds.Dataset:
     log.info("time to get realizations dataset %0.6f" % (t1 - t0))
 
     return dataset
-
-
-# def load_realizations(
-#     imt: str,
-#     location: 'CodedLocation',
-#     vs30: int,
-#     component_branches: list['HazardComponentBranch'],
-#     compatibility_key: str,
-# ) -> pd.DataFrame:
-#     """
-#     Load component realizations from the database.
-
-#     Parameters:
-#         component_branches: list of the component branches that are combined to construct the full logic tree
-#         imt: the intensity measure type (e.g. "PGA", "SA(1.5)")
-#         location: the site location
-#         vs30: the site vs30
-#         compatibility_key: the compatibility key used to lookup the correct realizations in the database
-
-#     Returns:
-#         values: the component realizations
-#     """
-#     dataset = get_realizations_dataset()
-
-#     gmms_digests = [branch.gmcm_hash_digest for branch in component_branches]
-#     sources_digests = [branch.source_hash_digest for branch in component_branches]
-
-#     flt = (
-#         (pc.field('compatible_calc_id') == pc.scalar(compatibility_key))
-#         & (pc.is_in(pc.field('sources_digest'), pa.array(sources_digests)))
-#         & (pc.is_in(pc.field('gmms_digest'), pa.array(gmms_digests)))
-#         & (pc.field('nloc_0') == pc.scalar(location.downsample(1.0).code))
-#         & (pc.field('nloc_001') == pc.scalar(location.downsample(0.001).code))
-#         & (pc.field('imt') == pc.scalar(imt))
-#         & (pc.field('vs30') == pc.scalar(vs30))
-#     )
-
-#     t0 = time.monotonic()
-#     columns = ['sources_digest', 'gmms_digest', 'values']
-#     arrow_scanner = ds.Scanner.from_dataset(dataset, filter=flt, columns=columns, use_threads=False)
-#     t1 = time.monotonic()
-
-#     rlz_table = arrow_scanner.to_table()
-#     t2 = time.monotonic()
-#     if len(rlz_table) == 0:
-#         raise Exception(
-#             f"no realizations were found in the database for {location=}, {imt=}, {vs30=}, {compatibility_key=}"
-#         )
-
-#     log.info("load scanner:%0.6f, to_arrow %0.6fs" % (t1 - t0, t2 - t1))
-#     log.info("RSS: {}MB".format(pa.total_allocated_bytes() >> 20))
-#     log.info("loaded %s realizations in arrow", rlz_table.shape[0])
-
-#     rlz_df = rlz_table.to_pandas()
-#     rlz_df['sources_digest'] = rlz_df['sources_digest'].astype(str)
-#     rlz_df['gmms_digest'] = rlz_df['gmms_digest'].astype(str)
-#     return rlz_df

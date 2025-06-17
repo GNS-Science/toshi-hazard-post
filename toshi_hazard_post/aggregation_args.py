@@ -106,22 +106,8 @@ class SiteArgs(BaseModel):
 
 
 class CalculationArgs(BaseModel):
-    imts: Optional[list[IntensityMeasureTypeEnum]] = None
-    agg_types: Optional[list[AggregationEnum]] = None
-
-    @field_validator('imts', mode='after')
-    @classmethod
-    def all_imts(cls, value: Any) -> Any:
-        if value is None:
-            return [e for e in IntensityMeasureTypeEnum]
-        return value
-
-    @field_validator('agg_types', mode='after')
-    @classmethod
-    def all_agg_types(cls, value: Any) -> Any:
-        if value is None:
-            return [e for e in AggregationEnum]
-        return value
+    imts: list[IntensityMeasureTypeEnum] = [e for e in IntensityMeasureTypeEnum]
+    agg_types: Optional[list[AggregationEnum]] = [e for e in AggregationEnum]
 
 
 class DebugArgs(BaseModel):
