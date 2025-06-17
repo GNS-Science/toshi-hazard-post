@@ -2,6 +2,7 @@
 Primary functions for calculating an aggregation for a single, site, IMT, etc.
 """
 
+from multiprocessing import shared_memory
 import logging
 import os
 import time
@@ -13,6 +14,7 @@ import numpy as np
 import pyarrow.orc as orc
 
 import toshi_hazard_post.calculators as calculators
+import toshi_hazard_post.constants as constants
 from toshi_hazard_post.data import save_aggregations
 
 if TYPE_CHECKING:
@@ -39,9 +41,8 @@ class AggSharedArgs:
     agg_types: list[str]
     compatibility_key: str
     hazard_model_id: str
-    weights: 'npt.NDArray'
-    component_branches: list['HazardComponentBranch']
-    branch_hash_table: list[list[str]]
+    weights_shape: tuple[int]
+    branch_hash_table_shape: tuple[int]
     skip_save: bool
 
 
@@ -204,8 +205,12 @@ def calc_aggregation(task_args: AggTaskArgs, shared_args: AggSharedArgs) -> None
     agg_types = shared_args.agg_types
     compatibility_key = shared_args.compatibility_key
     hazard_model_id = shared_args.hazard_model_id
-    weights = shared_args.weights
-    branch_hash_table = shared_args.branch_hash_table
+
+    branch_hash_table_shm = shared_memory.SharedMemory(name=constants.BRANCH_HASH_TABLE_SHM_NAME)
+    branch_hash_table = np.ndarray(shared_args.branch_hash_table_shape, dtype='<U24', buffer=branch_hash_table_shm.buf)
+
+    weights_shm = shared_memory.SharedMemory(name=constants.WEIGHTS_SHM_NAME)
+    weights = np.ndarray(shared_args.weights_shape, dtype=np.float64, buffer=weights_shm.buf)
 
     log.info("worker %s: loading realizations from %s. . ." % (worker_name, task_args.table_filepath))
     component_probs = load_realizations(task_args.table_filepath)

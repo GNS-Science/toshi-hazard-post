@@ -2,6 +2,8 @@
 Module for coordinating and launching aggregation jobs.
 """
 
+from multiprocessing import shared_memory
+import numpy as np
 import itertools
 import logging
 import sys
@@ -21,6 +23,7 @@ from toshi_hazard_post.aggregation_setup import Site, get_logic_trees, get_sites
 from toshi_hazard_post.data import get_batch_table, get_job_datatable, get_realizations_dataset
 from toshi_hazard_post.local_config import get_config
 from toshi_hazard_post.logic_tree import HazardLogicTree
+import toshi_hazard_post.constants as constants
 
 if TYPE_CHECKING:
     from nzshm_common.location import CodedLocation
@@ -130,16 +133,25 @@ def run_aggregation(args: AggregationArgs) -> None:
 
     component_branches = logic_tree.component_branches
 
+    # TODO: this is not true
     assert args.calculation.agg_types is not None  # guarnteed to not be none by Pydantic validation function
     agg_types = [a.value for a in args.calculation.agg_types]
 
     assert args.calculation.imts is not None  # guarnteed to not be none by Pydantic validation function
     imts = [i.value for i in args.calculation.imts]
 
+    weights_shm = shared_memory.SharedMemory(name=constants.WEIGHTS_SHM_NAME, create=True, size=weights.nbytes)
+    branch_hash_table = np.array(branch_hash_table)
+    branch_hash_table_shm = shared_memory.SharedMemory(name=constants.BRANCH_HASH_TABLE_SHM_NAME, create=True, size=branch_hash_table.nbytes)
+
+    bht = np.ndarray(branch_hash_table.shape, dtype=branch_hash_table.dtype, buffer=branch_hash_table_shm.buf)
+    bht[:] = branch_hash_table[:]
+    wgt = np.ndarray(weights.shape, dtype=weights.dtype, buffer=weights_shm.buf)
+    wgt[:] = weights[:]
+
     shared_args = AggSharedArgs(
-        weights=weights,
-        branch_hash_table=branch_hash_table,
-        component_branches=component_branches,
+        weights_shape=weights.shape,
+        branch_hash_table_shape=branch_hash_table.shape,
         agg_types=agg_types,
         hazard_model_id=args.general.hazard_model_id,
         compatibility_key=args.general.compatibility_key,
@@ -178,6 +190,10 @@ def run_aggregation(args: AggregationArgs) -> None:
                 log.error("Exception encountered for task args %s: %s" % (futures[future], repr(exception)))
 
     time_parallel_end = time.perf_counter()
+    branch_hash_table_shm.close()
+    branch_hash_table_shm.unlink()
+    weights_shm.close()
+    weights_shm.unlink()
 
     time1 = time.perf_counter()
     log.info("total time: processed %d calculations in %0.3f seconds" % (num_jobs, time1 - time0))
