@@ -12,7 +12,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Generator
 
 import numpy as np
-import psutil
 import pyarrow.orc as orc
 from nzshm_common.location.coded_location import bin_locations
 
@@ -37,23 +36,6 @@ log = logging.getLogger(__name__)
 PARTITION_RESOLUTION = 1.0
 
 
-# TODO:
-# - [ ] hanlde locations file
-# - [x] check that the correct number of records are returned
-# - [x] add timing and better memeory log messages
-# - [x] review all log messages, enusre correct level and placement
-# - [x] make sure resultion is correct when a coded location is used
-# - [x] organize into correct modules
-# - [ ] test coverage
-# - [x] WORKING dir can be set
-
-process = psutil.Process()
-
-
-def log_memory(state):
-    log.debug('memory use at state "%s": %d MB' % (state, process.memory_info().rss / 1024**2))
-
-
 def generate_agg_jobs(
     sites: list[Site],
     imts: list[str],
@@ -69,21 +51,17 @@ def generate_agg_jobs(
     vs30s_unique = set([site.vs30 for site in sites])
 
     log.info("creating batches from %s sites and %s vs30s" % (len(sites), len(vs30s_unique)))
-    log_memory("start generate")
     for vs30 in vs30s_unique:
         locations = [site.location for site in sites if site.vs30 == vs30]
         location_bins = bin_locations(locations, PARTITION_RESOLUTION)
         for nloc_0, location_bin in location_bins.items():
             log.info("batch %d, %s" % (vs30, nloc_0))
-            log_memory("got dataset")
             batch_datatable = get_batch_table(
                 dataset, compatibility_key, sources_digests, gmms_digests, nloc_0, vs30, imts
             )
-            log_memory("batch datatable")
 
             for location, imt in itertools.product(location_bin.locations, imts):
                 job_datatable = get_job_datatable(batch_datatable, location, imt, n_expected)
-                log_memory("job datatable")
                 working_dir = get_config()['WORKING_DIR']
                 filepath = working_dir / f"{vs30}_{nloc_0}_{location.downsample(0.001).code}_{imt}_dataset.dat"
                 log.debug("writing file %s for agg job %s, %s" % (filepath, location.code, imt))
