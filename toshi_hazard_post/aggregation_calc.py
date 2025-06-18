@@ -183,7 +183,13 @@ def create_component_dict(component_rates: 'pd.DataFrame') -> Dict[str, 'npt.NDA
     return component_rates['rates'].to_dict()
 
 
-def calc_aggregation(task_args: AggTaskArgs, shared_args: AggSharedArgs) -> None:
+def calc_aggregation(list_of_args: list[AggTaskArgs], shared_args: AggSharedArgs) -> None:
+    worker_name = os.getpid()
+    log.info("worker %s: starting on %d jobs" % (worker_name, len(list_of_args)))
+    for task_args in list_of_args:
+        calc_one_aggregation(task_args, shared_args)
+
+def calc_one_aggregation(task_args: AggTaskArgs, shared_args: AggSharedArgs) -> None:
     """
     Calculate hazard aggregation for a single site and imt and save result
 
@@ -243,6 +249,7 @@ def calc_aggregation(task_args: AggTaskArgs, shared_args: AggSharedArgs) -> None
     else:
         log.info("worker %s saving result . . . " % worker_name)
         save_aggregations(probs, location, vs30, imt, agg_types, hazard_model_id, compatibility_key)
+    log.info(f"deleting {task_args.table_filepath}")
     task_args.table_filepath.unlink()
     time6 = time.perf_counter()
     log.info('worker %s time to perform one aggregation %0.2f seconds' % (worker_name, time6 - time0))

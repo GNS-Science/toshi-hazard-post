@@ -1,7 +1,7 @@
 """
 Module for coordinating and launching aggregation jobs.
 """
-
+import multiprocessing
 import itertools
 import logging
 import sys
@@ -139,11 +139,13 @@ def run_aggregation(args: AggregationArgs) -> None:
     time_parallel_start = time.perf_counter()
     num_jobs = 0
     log.info("starting %d calculations with %d workers" % (len(sites) * len(imts), num_workers))
+    total_jobs = len(sites) * len(imts)
 
     futures = {}
     ds1 = get_realizations_dataset()
+    # with ProcessPoolExecutor(max_workers=num_workers, mp_context=multiprocessing.get_context("spawn")) as executor:
     with ProcessPoolExecutor(max_workers=num_workers) as executor:
-        # TODO: add locations file
+        list_args = []
         for vs30, location, imt, filepath in generate_agg_jobs(
             sites,
             imts,
@@ -157,15 +159,19 @@ def run_aggregation(args: AggregationArgs) -> None:
                 imt=imt,
                 table_filepath=filepath,
             )
-            future = executor.submit(calc_aggregation, task_args, shared_args)
-            futures[future] = task_args
+            list_args.append(task_args)
             num_jobs += 1
+            if len(list_args) % 10 == 0 or num_jobs == total_jobs:
+                future = executor.submit(calc_aggregation, list_args, shared_args)
+                futures[future] = list_args
+                list_args = []
 
         num_failed = 0
         for future in as_completed(futures.keys()):
             if exception := future.exception():
                 num_failed += 1
-                log.error("Exception encountered for task args %s: %s" % (futures[future], repr(exception)))
+                # log.error("Exception encountered for task args %s: %s" % (futures[future], repr(exception)))
+                log.error("Exception encountered for task args %s: %s" % ("list of args", repr(exception)))
 
     time_parallel_end = time.perf_counter()
     branch_hash_table_shm.close()
