@@ -68,7 +68,7 @@ def generate_agg_jobs(
                 t0 = time.perf_counter()
                 orc.write_table(job_datatable, filepath, compression='snappy')
                 t1 = time.perf_counter()
-                log.debug("time to write data: %0.5f seconds" % (t1 - t0))
+                log.info("time to write data: %0.5f seconds" % (t1 - t0))
                 yield vs30, location, imt, filepath
 
 
