@@ -112,6 +112,7 @@ class CalculationArgs(BaseModel):
 
 class DebugArgs(BaseModel):
     skip_save: bool = False
+    restart: Optional[tuple[FilePath, FilePath]] = None
 
 
 class AggregationArgs(BaseModel):
