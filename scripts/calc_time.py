@@ -1,7 +1,7 @@
 from pathlib import Path
 import sys
 
-def main(log_filepath, nproc):
+def main(log_filepath):
     log_filepath = Path(log_filepath)
 
     times_jobtable = []
@@ -9,7 +9,9 @@ def main(log_filepath, nproc):
     times_calc = []
     with log_filepath.open() as f:
         for line in f.readlines():
-            if "time to create batch table" in line:
+            if "starting" in line and "calculations with" in line:
+                nproc = int(line.split(' ')[-2])
+            elif "time to create batch table" in line:
                 times_batchtable.append(float(line.split(' ')[-2]))
             elif "time to create job table" in line:
                 times_jobtable.append(float(line.split(' ')[-2]))
@@ -29,5 +31,4 @@ def main(log_filepath, nproc):
 
 if __name__ == "__main__":
     filepath = sys.argv[1]
-    nproc = int(sys.argv[2])
-    main(filepath, nproc)
+    main(filepath)
