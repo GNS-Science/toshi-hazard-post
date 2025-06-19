@@ -192,7 +192,7 @@ def calc_aggregation(task_args: AggTaskArgs, shared_args: AggSharedArgs) -> None
         shared_args: The arguments shared among all workers.
         worker_name: The name of the parallel worker.
     """
-    time0 = time.perf_counter()
+    time_start = time.perf_counter()
     worker_name = os.getpid()
 
     location = task_args.location
@@ -216,26 +216,15 @@ def calc_aggregation(task_args: AggTaskArgs, shared_args: AggSharedArgs) -> None
     log.debug("worker %s: %s rlz_table " % (worker_name, component_probs.shape))
 
     # convert probabilities to rates
-    time1 = time.perf_counter()
     component_rates = convert_probs_to_rates(component_probs)
     del component_probs
-    time2 = time.perf_counter()
-    log.debug('worker %s: time to convert_probs_to_rates() % 0.2f' % (worker_name, time2 - time1))
 
     component_rates = create_component_dict(component_rates)
 
-    time3 = time.perf_counter()
-    log.debug('worker %s: time to convert to dict and set digest index %0.2f seconds' % (worker_name, time3 - time2))
-    log.debug('worker %s: rates_table %d' % (worker_name, len(component_rates)))
-
     composite_rates = build_branch_rates(branch_hash_table, component_rates)
-    time4 = time.perf_counter()
-    log.debug('worker %s: time to build_ranch_rates %0.2f seconds' % (worker_name, time4 - time3))
 
     log.info("worker %s:  calculating aggregates . . . " % worker_name)
     hazard = calculate_aggs(composite_rates, weights, agg_types)
-    time5 = time.perf_counter()
-    log.debug('worker %s: time to calculate aggs %0.2f seconds' % (worker_name, time5 - time4))
 
     probs = calculators.rate_to_prob(hazard, 1.0)
     if shared_args.skip_save:
@@ -244,5 +233,5 @@ def calc_aggregation(task_args: AggTaskArgs, shared_args: AggSharedArgs) -> None
         log.info("worker %s saving result . . . " % worker_name)
         save_aggregations(probs, location, vs30, imt, agg_types, hazard_model_id, compatibility_key)
     task_args.table_filepath.unlink()
-    time6 = time.perf_counter()
-    log.info('worker %s time to perform one aggregation %0.2f seconds' % (worker_name, time6 - time0))
+    time_end = time.perf_counter()
+    log.info('worker %s time to perform one aggregation %0.2f seconds' % (worker_name, time_end - time_start))

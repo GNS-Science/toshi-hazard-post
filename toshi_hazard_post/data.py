@@ -30,7 +30,6 @@ def get_batch_table(
     vs30: int,
     imts: list[str],
 ) -> pa.Table:
-    t0 = time.perf_counter()
     columns = ['nloc_001', 'imt', 'sources_digest', 'gmms_digest', 'values']
     flt = (
         (pc.field('compatible_calc_id') == pc.scalar(compatibility_key))
@@ -41,8 +40,6 @@ def get_batch_table(
         & (pc.is_in(pc.field('imt'), pa.array(imts)))
     )
     batch_datatable = dataset.to_table(columns=columns, filter=flt)
-    t1 = time.perf_counter()
-    log.info("time to create batch table: %0.1f seconds" % (t1 - t0))
     return batch_datatable
 
 
@@ -52,7 +49,6 @@ def get_job_datatable(
     imt: str,
     n_expected: int,
 ) -> pa.Table:
-    t0 = time.perf_counter()
     table = batch_datatable.filter((pc.field("imt") == imt) & (pc.field("nloc_001") == location.downsample(0.001).code))
     table = pa.table(
         {
@@ -71,8 +67,6 @@ def get_job_datatable(
         )
         raise Exception(msg)
 
-    t1 = time.perf_counter()
-    log.info("time to create job table: %0.5f seconds" % (t1 - t0))
     return table
 
 
@@ -135,9 +129,6 @@ def get_realizations_dataset() -> ds.Dataset:
     config = get_config()
     rlz_dir, filesystem = pyarrow_dataset.configure_output(config['RLZ_DIR'])
 
-    t0 = time.monotonic()
     dataset = ds.dataset(rlz_dir, format='parquet', filesystem=filesystem, partitioning='hive')
-    t1 = time.monotonic()
-    log.info("time to get realizations dataset %0.6f" % (t1 - t0))
 
     return dataset

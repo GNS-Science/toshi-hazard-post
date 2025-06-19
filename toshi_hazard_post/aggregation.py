@@ -64,11 +64,7 @@ def generate_agg_jobs(
                 job_datatable = get_job_datatable(batch_datatable, location, imt, n_expected)
                 working_dir = get_config()['WORKING_DIR']
                 filepath = working_dir / f"{vs30}_{nloc_0}_{location.downsample(0.001).code}_{imt}_dataset.dat"
-                log.debug("writing file %s for agg job %s, %s" % (filepath, location.code, imt))
-                t0 = time.perf_counter()
                 orc.write_table(job_datatable, filepath, compression='snappy')
-                t1 = time.perf_counter()
-                log.info("time to write data: %0.5f seconds" % (t1 - t0))
                 yield vs30, location, imt, filepath
 
 
@@ -143,6 +139,7 @@ def run_aggregation(args: AggregationArgs) -> None:
     futures = {}
     ds1 = get_realizations_dataset()
     with ProcessPoolExecutor(max_workers=num_workers) as executor:
+        time_loop_start = time.perf_counter()
         for vs30, location, imt, filepath in generate_agg_jobs(
             sites,
             imts,
@@ -156,9 +153,13 @@ def run_aggregation(args: AggregationArgs) -> None:
                 imt=imt,
                 table_filepath=filepath,
             )
+            # log.info("submit job at %f seconds" % (t-time_parallel_start))
             future = executor.submit(calc_aggregation, task_args, shared_args)
             futures[future] = task_args
             num_jobs += 1
+            time_loop_end = time.perf_counter()
+            log.info("time to submit job %f seconds" % (time_loop_end-time_loop_start))
+            time_loop_start = time_loop_end
 
         num_failed = 0
         for future in as_completed(futures.keys()):
