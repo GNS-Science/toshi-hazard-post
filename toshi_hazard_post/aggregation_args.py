@@ -107,12 +107,13 @@ class SiteArgs(BaseModel):
 
 class CalculationArgs(BaseModel):
     imts: list[IntensityMeasureTypeEnum] = [e for e in IntensityMeasureTypeEnum]
-    agg_types: Optional[list[AggregationEnum]] = [e for e in AggregationEnum]
+    agg_types: list[AggregationEnum] = [e for e in AggregationEnum]
 
 
 class DebugArgs(BaseModel):
     skip_save: bool = False
     restart: Optional[tuple[FilePath, FilePath]] = None
+
 
 class AggregationArgs(BaseModel):
     filepath: FilePath
