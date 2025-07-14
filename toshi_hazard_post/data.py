@@ -17,8 +17,8 @@ from toshi_hazard_post.local_config import get_config
 log = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
-    import numpy.typing as npt  # pragma: no cover
-    from nzshm_common.location.coded_location import CodedLocation  # pragma: no cover
+    import numpy.typing as npt
+    from nzshm_common.location.coded_location import CodedLocation
 
 
 def get_batch_table(
