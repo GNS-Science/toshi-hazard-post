@@ -94,24 +94,23 @@ def run_aggregation(args: AggregationArgs) -> None:
     # create the logic tree objects and build the full logic tree
     log.info("getting logic trees . . . ")
     logic_tree = HazardLogicTree(srm_logic_tree, gmcm_logic_tree)
-
-    log.info("calculating weights and branch hash table . . . ")
-    tic = time.perf_counter()
-    weights = logic_tree.weights
-    branch_hash_table: list | 'npt.NDArray' = logic_tree.branch_hash_table
-    toc = time.perf_counter()
-
-    log.info('time to build weight array and hash table %0.2f seconds' % (toc - tic))
-    log.info("Size of weight array: {}MB".format(weights.nbytes >> 20))
-    log.info("Size of hash table: {}MB".format(sys.getsizeof(branch_hash_table) >> 20))
-
     component_branches = logic_tree.component_branches
 
-    # TODO: this is not true
-    assert args.calculation.agg_types is not None  # guarnteed to not be none by Pydantic validation function
-    agg_types = [a.value for a in args.calculation.agg_types]
+    if not args.debug.restart:
+        log.info("calculating weights and branch hash table . . . ")
+        tic = time.perf_counter()
+        weights = logic_tree.weights
+        branch_hash_table: list | 'npt.NDArray' = logic_tree.branch_hash_table
+        toc = time.perf_counter()
 
-    assert args.calculation.imts is not None  # guarnteed to not be none by Pydantic validation function
+        log.info('time to build weight array and hash table %0.2f seconds' % (toc - tic))
+        log.info("Size of weight array: {}MB".format(weights.nbytes >> 20))
+        log.info("Size of hash table: {}MB".format(sys.getsizeof(branch_hash_table) >> 20))
+    else:
+        branch_hash_table = np.load(args.debug.restart[0])
+        weights = np.load(args.debug.restart[1])
+
+    agg_types = [a.value for a in args.calculation.agg_types]
     imts = [i.value for i in args.calculation.imts]
 
     weights_shm = shared_memory.SharedMemory(name=constants.WEIGHTS_SHM_NAME, create=True, size=weights.nbytes)
