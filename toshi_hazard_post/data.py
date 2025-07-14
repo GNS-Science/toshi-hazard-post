@@ -42,7 +42,7 @@ def get_batch_table(
     )
     batch_datatable = dataset.to_table(columns=columns, filter=flt)
     t1 = time.perf_counter()
-    log.info("time to create batch table: %0.1f seconds" % (t1 - t0))
+    log.debug("time to create batch table: %0.1f seconds" % (t1 - t0))
     return batch_datatable
 
 
@@ -72,7 +72,7 @@ def get_job_datatable(
         raise Exception(msg)
 
     t1 = time.perf_counter()
-    log.info("time to create job table: %0.5f seconds" % (t1 - t0))
+    log.debug("time to create job table: %0.5f seconds" % (t1 - t0))
     return table
 
 
@@ -138,6 +138,6 @@ def get_realizations_dataset() -> ds.Dataset:
     t0 = time.monotonic()
     dataset = ds.dataset(rlz_dir, format='parquet', filesystem=filesystem, partitioning='hive')
     t1 = time.monotonic()
-    log.info("time to get realizations dataset %0.6f" % (t1 - t0))
+    log.debug("time to get realizations dataset %0.6f" % (t1 - t0))
 
     return dataset

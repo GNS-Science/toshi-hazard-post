@@ -68,7 +68,7 @@ def generate_agg_jobs(
                 t0 = time.perf_counter()
                 orc.write_table(job_datatable, filepath, compression='snappy')
                 t1 = time.perf_counter()
-                log.info("time to write data: %0.5f seconds" % (t1 - t0))
+                log.debug("time to write data: %0.5f seconds" % (t1 - t0))
                 yield vs30, location, imt, filepath
 
 
@@ -142,7 +142,6 @@ def run_aggregation(args: AggregationArgs) -> None:
     futures = {}
     ds1 = get_realizations_dataset()
     with ProcessPoolExecutor(max_workers=num_workers) as executor:
-        # TODO: add locations file
         for vs30, location, imt, filepath in generate_agg_jobs(
             sites,
             imts,
