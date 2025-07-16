@@ -1,7 +1,7 @@
 """A collection of calculation functions for hazard aggregation."""
 
 import logging
-from typing import TYPE_CHECKING, List, Tuple, Union
+from typing import TYPE_CHECKING, Tuple, Union
 
 import numpy as np
 from numba import jit
@@ -76,7 +76,7 @@ def cov(mean: 'npt.NDArray', std: 'npt.NDArray') -> 'npt.NDArray':
 
 
 def weighted_quantiles(
-    values: 'npt.NDArray', weights: 'npt.NDArray', quantiles: Union[List[float], 'npt.NDArray']
+    values: 'npt.NDArray', weights: 'npt.NDArray', quantiles: Union[list[float], 'npt.NDArray']
 ) -> 'npt.NDArray':
     """Calculate weighted quantiles of array
 

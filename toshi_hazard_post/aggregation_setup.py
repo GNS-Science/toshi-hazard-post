@@ -3,7 +3,7 @@ from collections import namedtuple
 from dataclasses import dataclass
 from itertools import product
 from pathlib import Path
-from typing import Generator, Iterable, List, Optional, Union
+from typing import Generator, Iterable, Optional, Union
 
 from nzshm_common.location.coded_location import CodedLocation
 from nzshm_common.location.location import get_locations
@@ -66,7 +66,7 @@ def get_sites(
     locations_file: Optional[Path] = None,
     locations: Optional[Iterable[str]] = None,
     vs30s: Optional[Iterable[int]] = None,
-) -> List[Site]:
+) -> list[Site]:
     """
     Get the sites (combined location and vs30) at which to calculate hazard. Either a locations_file
     or locations can be passed, but not both. If the locations_file contains vs30 values, they

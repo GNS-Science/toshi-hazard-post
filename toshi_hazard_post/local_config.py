@@ -9,11 +9,14 @@ get_config() inside a function. Note that get_config() must be called in functio
 changes to 'THP_ENV_FILE' will not be effective
 
 Parameters:
-    THP_NUM_WORKERS: number of parallel processes. if == 1, will run without spawning new processes
-    THP_{RLZ|AGG}_DIR: the path to the {realization or aggregate} datastore. Can be a local filepath or s3 bucket
+    THP_NUM_WORKERS: number of parallel processes. if == 1, will run without spawning new processes.
+    THP_{RLZ|AGG}_DIR: the path to the {realization or aggregate} datastore. Can be a local filepath or s3 bucket.
+    THP_WORKING_DIR: the path to the directory to use for writing realization data tables.
 """
 
 import os
+from pathlib import Path
+from typing import Any
 
 from dotenv import load_dotenv
 
@@ -21,11 +24,14 @@ DEFAULT_NUM_WORKERS = 1
 DEFAULT_FS = 'LOCAL'
 
 
-def get_config():
+def get_config() -> dict[str, Any]:
     load_dotenv(os.getenv('THP_ENV_FILE', '.env'))
-    return dict(
+    config = dict(
         NUM_WORKERS=int(os.getenv('THP_NUM_WORKERS', DEFAULT_NUM_WORKERS)),
         RLZ_DIR=os.getenv('THP_RLZ_DIR'),
         AGG_DIR=os.getenv('THP_AGG_DIR'),
-        DELAY_MULTIPLIER=float(os.getenv('THP_DELAY_MULTIPLIER', 1.0)),
+        WORKING_DIR=Path(os.getenv('THP_WORKING_DIR', '/tmp')).expanduser(),
     )
+    if not config['WORKING_DIR'].is_dir():  # type: ignore
+        raise FileNotFoundError(f"WORKING_DIR {config['WORKING_DIR']} is not a directory")
+    return config

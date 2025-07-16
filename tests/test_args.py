@@ -4,6 +4,8 @@ from pathlib import Path
 import pytest
 import tomlkit
 
+from toshi_hazard_store.model.constraints import AggregationEnum, IntensityMeasureTypeEnum
+
 from toshi_hazard_post.aggregation_args import AggregationArgs
 
 config_filepath = Path(__file__).parent / 'fixtures/hazard.toml'
@@ -34,6 +36,11 @@ config3['site_params']['locations_file'] = str(Path(__file__).parent / 'fixtures
 config4 = get_config()
 del config4['calculation']['imts']
 
+# can specify sites in a file and uniform vs30
+config5 = get_config()
+del config5['site_params']['locations']
+config5['site_params']['locations_file'] = str(Path(__file__).parent / 'fixtures/sites.csv')
+
 # if specifying a model version, it must exist
 config_keyerror1 = get_config()
 config_keyerror1['hazard_model']['nshm_model_version'] = 'NOT A MODEL VERSION'
@@ -50,6 +57,15 @@ config_keyerror3['hazard_model']['srm_logic_tree'] = config_filepath
 # the compatability key must exist
 config_error4 = get_config()
 config_error4['general']['compatibility_key'] = "NOT A COMPAT KEY"
+
+# cannot specify both locations and a locations file
+config_error5 = get_config()
+config_error5['site_params']['locations_file'] = str(Path(__file__).parent / 'fixtures/sites_vs30s.csv')
+
+# cannot specify both uniform and site specific vs30
+config_error6 = get_config()
+del config_error6['site_params']['locations']
+config_error6['site_params']['locations_file'] = str(Path(__file__).parent / 'fixtures/sites_vs30s.csv')
 
 
 # if specifying logic tree files, they must exist
@@ -93,7 +109,7 @@ config_verror4 = get_config()
 config_verror4['calculation']['agg_types'] = ["mean", "0.5", "1.1"]
 
 
-@pytest.mark.parametrize("config", [config1, config2, config3, config4])
+@pytest.mark.parametrize("config", [config1, config2, config3, config4, config5])
 def test_args_valid(config):
     assert AggregationArgs(**config)
 
@@ -105,6 +121,8 @@ def test_args_valid(config):
         config_keyerror2,
         config_keyerror3,
         config_error4,
+        config_error5,
+        config_error6,
         # config_keyerror4,
         # config_keyerror5,
         config_keyerror6,
@@ -120,3 +138,17 @@ def test_args_valid(config):
 def test_args_error(config):
     with pytest.raises(ValueError):
         AggregationArgs(**config)
+
+
+def test_default_imts():
+    config = get_config()
+    del config['calculation']['imts']
+    agg_args = AggregationArgs(**config)
+    assert agg_args.calculation.imts == [imt for imt in IntensityMeasureTypeEnum]
+
+
+def test_default_aggs():
+    config = get_config()
+    del config['calculation']['agg_types']
+    agg_args = AggregationArgs(**config)
+    assert agg_args.calculation.agg_types == [agg for agg in AggregationEnum]
