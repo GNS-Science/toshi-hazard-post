@@ -40,8 +40,8 @@ def generate_agg_jobs(
     imts: list[str],
     compatibility_key: str,
     component_branches: list['HazardComponentBranch'],
-    # dataset: 'ds.Dataset',
 ) -> Generator[tuple[int, 'CodedLocation', str, Path], None, None]:
+
     gmms_digests = [branch.gmcm_hash_digest for branch in component_branches]
     sources_digests = [branch.source_hash_digest for branch in component_branches]
     n_expected = len(component_branches)
