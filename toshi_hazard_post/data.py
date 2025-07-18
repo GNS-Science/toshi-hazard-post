@@ -4,7 +4,7 @@ Functions for loading realizations and saving aggregations
 
 import logging
 import time
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 import pyarrow as pa
 import pyarrow.compute as pc
@@ -26,8 +26,6 @@ def get_batch_table(
     compatibility_key: str,
     sources_digests: list[str],
     gmms_digests: list[str],
-    nloc_0: str,
-    vs30: int,
     imts: list[str],
 ) -> pa.Table:
     t0 = time.perf_counter()
@@ -36,8 +34,6 @@ def get_batch_table(
         (pc.field('compatible_calc_id') == pc.scalar(compatibility_key))
         & (pc.is_in(pc.field('sources_digest'), pa.array(sources_digests)))
         & (pc.is_in(pc.field('gmms_digest'), pa.array(gmms_digests)))
-        & (pc.field('nloc_0') == pc.scalar(nloc_0))
-        & (pc.field('vs30') == pc.scalar(vs30))
         & (pc.is_in(pc.field('imt'), pa.array(imts)))
     )
     batch_datatable = dataset.to_table(columns=columns, filter=flt)
@@ -119,12 +115,14 @@ def save_aggregations(
     )
 
 
-def get_realizations_dataset() -> ds.Dataset:
+def get_realizations_dataset(vs30: Optional[int] = None, nloc_0: Optional[str] = None) -> ds.Dataset:
     """
-    Get a pyarrow Dataset filtered to a location bin (partition), component branches, and compatibility key
+    Get a pyarrow Dataset for realizations.
+
+    Optional parameters take advantage of partitioning of dataset for faster retrieval.
 
     Parameters:
-        location_bin: the location bin that the database is partitioned on
+        vs30:
         component_branches: the branches to filter into the dataset
         compatibility_key: the hazard engine compatibility ley to filter into the dataset
 
@@ -133,7 +131,12 @@ def get_realizations_dataset() -> ds.Dataset:
     """
 
     config = get_config()
-    rlz_dir, filesystem = pyarrow_dataset.configure_output(config['RLZ_DIR'])
+    rlz_dir_tmp = config['RLZ_DIR']
+    if vs30 is not None:
+        rlz_dir_tmp += f"/vs30={vs30}"
+        if nloc_0 is not None:
+            rlz_dir_tmp += f"/nloc_0={nloc_0}"
+    rlz_dir, filesystem = pyarrow_dataset.configure_output(rlz_dir_tmp)
 
     t0 = time.monotonic()
     dataset = ds.dataset(rlz_dir, format='parquet', filesystem=filesystem, partitioning='hive')
