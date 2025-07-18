@@ -59,13 +59,13 @@ def get_job_datatable(
     )
 
     if len(table) == 0:
-        raise Exception(f"no records found for location: {location}, imt: {imt}")
+        raise KeyError(f"no records found for location: {location}, imt: {imt}")
     if len(table) != n_expected:
         msg = (
             f"incorrect number of records found for location: "
             f"{location}, imt: {imt}. Expected {n_expected}, got {len(table)}"
         )
-        raise Exception(msg)
+        raise KeyError(msg)
 
     t1 = time.perf_counter()
     log.debug("time to create job table: %0.5f seconds" % (t1 - t0))
