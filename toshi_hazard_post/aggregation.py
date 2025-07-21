@@ -25,7 +25,6 @@ from toshi_hazard_post.logic_tree import HazardLogicTree
 
 if TYPE_CHECKING:
     import numpy.typing as npt
-    import pyarrow.dataset as ds
     from nzshm_common.location import CodedLocation
 
     from toshi_hazard_post.logic_tree import HazardComponentBranch
@@ -41,8 +40,8 @@ def generate_agg_jobs(
     imts: list[str],
     compatibility_key: str,
     component_branches: list['HazardComponentBranch'],
-    dataset: 'ds.Dataset',
 ) -> Generator[tuple[int, 'CodedLocation', str, Path], None, None]:
+
     gmms_digests = [branch.gmcm_hash_digest for branch in component_branches]
     sources_digests = [branch.source_hash_digest for branch in component_branches]
     n_expected = len(component_branches)
@@ -55,11 +54,11 @@ def generate_agg_jobs(
         locations = [site.location for site in sites if site.vs30 == vs30]
         location_bins = bin_locations(locations, PARTITION_RESOLUTION)
         for nloc_0, location_bin in location_bins.items():
+            dataset = get_realizations_dataset(vs30, nloc_0)
             log.info("batch %d, %s" % (vs30, nloc_0))
             batch_datatable = get_batch_table(
-                dataset, compatibility_key, sources_digests, gmms_digests, nloc_0, vs30, imts
+                dataset, compatibility_key, sources_digests, gmms_digests, vs30, nloc_0, imts
             )
-
             for location, imt in itertools.product(location_bin.locations, imts):
                 job_datatable = get_job_datatable(batch_datatable, location, imt, n_expected)
                 working_dir = get_config()['WORKING_DIR']
@@ -140,14 +139,14 @@ def run_aggregation(args: AggregationArgs) -> None:
     log.info("starting %d calculations with %d workers" % (len(sites) * len(imts), num_workers))
 
     futures = {}
-    ds1 = get_realizations_dataset()
+    # ds1 = get_realizations_dataset()
     with ProcessPoolExecutor(max_workers=num_workers) as executor:
         for vs30, location, imt, filepath in generate_agg_jobs(
             sites,
             imts,
             args.general.compatibility_key,
             component_branches,
-            ds1,
+            # ds1,
         ):
             task_args = AggTaskArgs(
                 location=location,
