@@ -26,6 +26,8 @@ def get_batch_table(
     compatibility_key: str,
     sources_digests: list[str],
     gmms_digests: list[str],
+    vs30: int,
+    nloc_0: str,
     imts: list[str],
 ) -> pa.Table:
     t0 = time.perf_counter()
@@ -36,6 +38,15 @@ def get_batch_table(
         & (pc.is_in(pc.field('gmms_digest'), pa.array(gmms_digests)))
         & (pc.is_in(pc.field('imt'), pa.array(imts)))
     )
+
+    # if we used the partitioning when fetching the dataset then vs30 and nloc_0 will not be in the
+    # schema (we will have already implicitly filtered on them)
+    dataset_columns = dataset.schema.names
+    if 'vs30' in dataset_columns:
+        flt = flt & (pc.field('vs30') == pc.scalar(vs30))
+    if 'nloc_0' in dataset_columns:
+        flt = flt & (pc.field('nloc_0') == pc.scalar(nloc_0))
+
     batch_datatable = dataset.to_table(columns=columns, filter=flt)
     t1 = time.perf_counter()
     log.debug("time to create batch table: %0.1f seconds" % (t1 - t0))
@@ -119,15 +130,15 @@ def get_realizations_dataset(vs30: Optional[int] = None, nloc_0: Optional[str] =
     """
     Get a pyarrow Dataset for realizations.
 
-    Optional parameters take advantage of partitioning of dataset for faster retrieval.
+    Optional parameters take advantage of partitioning of dataset for faster retrieval. The partitioning is
+    assumed to be vs30/nloc_0. See toshi-hazard-store documentation for details.
 
     Parameters:
-        vs30:
-        component_branches: the branches to filter into the dataset
-        compatibility_key: the hazard engine compatibility ley to filter into the dataset
+        vs30: the site vs30
+        nloc_0: the 1 degree grid location (e.g. '-41.0~175.0')
 
     Returns:
-        dataset: the dataset with the filteres applied
+        dataset: the relization dataset
     """
 
     config = get_config()

@@ -56,7 +56,9 @@ def generate_agg_jobs(
         for nloc_0, location_bin in location_bins.items():
             dataset = get_realizations_dataset(vs30, nloc_0)
             log.info("batch %d, %s" % (vs30, nloc_0))
-            batch_datatable = get_batch_table(dataset, compatibility_key, sources_digests, gmms_digests, imts)
+            batch_datatable = get_batch_table(
+                dataset, compatibility_key, sources_digests, gmms_digests, vs30, nloc_0, imts
+            )
             for location, imt in itertools.product(location_bin.locations, imts):
                 job_datatable = get_job_datatable(batch_datatable, location, imt, n_expected)
                 working_dir = get_config()['WORKING_DIR']
