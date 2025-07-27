@@ -1,6 +1,4 @@
-"""
-Functions for loading realizations and saving aggregations
-"""
+"""Functions for loading realizations and saving aggregations."""
 
 import logging
 import time
@@ -30,6 +28,22 @@ def get_batch_table(
     nloc_0: str,
     imts: list[str],
 ) -> pa.Table:
+    """Get the realization datatable for a batch of aggregation jobs.
+
+    Filtering is done for comatibility key, branch digests, vs30, nloc_0, and (multiple) imts.
+
+    Args:
+        dataset: the realization dataset.
+        compatibility_key: the toshi-hazard-store compatibility key.
+        sources_digests: the digests of the source branches.
+        gmms_digests: the digests of the gmcm branches.
+        vs30: the vs30 of the sites.
+        nloc_0: the nloc_0 (1.0 degree location code).
+        imts: the intensity measure types.
+
+    Returns:
+        The filtered datatable.
+    """
     t0 = time.perf_counter()
     columns = ['nloc_001', 'imt', 'sources_digest', 'gmms_digest', 'values']
     flt = (
@@ -59,6 +73,20 @@ def get_job_datatable(
     imt: str,
     n_expected: int,
 ) -> pa.Table:
+    """Get the realization datatable for a specific aggregation job (one IMT, location, etc.).
+
+    The batch_datatable is expected to be produced by get_batch_table which will have applied broader
+    filters on the dataset for vs30, nloc_0, etc.
+
+    Args:
+        batch_datatable: the pre-filtered datatable to be further filtered for a specific aggregation job.
+        location: the location of the site.
+        imt: the intensity measure type.
+        n_expected: the number of records expected (typically the number of branches).
+
+    Returns:
+        The filtered data table.
+    """
     t0 = time.perf_counter()
     table = batch_datatable.filter((pc.field("imt") == imt) & (pc.field("nloc_001") == location.downsample(0.001).code))
     table = pa.table(
@@ -90,24 +118,26 @@ def save_aggregations(
     imt: str,
     agg_types: list[str],
     hazard_model_id: str,
-    compatability_key: str,
+    compatibility_key: str,
 ) -> None:
-    """
-    Save the aggregated hazard to the database. Converts hazard as rates to proabilities before saving.
+    """Save the aggregated hazard to the database.
 
-    Parameters:
+    Converts hazard as rates to proabilities before saving.
+
+    Args:
         hazard: the aggregate hazard rates (not proabilities)
         location: the site location
         vs30: the site vs30
         imt: the intensity measure type (e.g. "PGA", "SA(1.5)")
         agg_types: the statistical aggregate types (e.g. "mean", "0.5")
         hazard_model_id: the model id for storing in the database
+        compatibility_key: the toshi-hazard-store compatibility key.
     """
 
     def generate_models():
         for i, agg in enumerate(agg_types):
             yield HazardAggregateCurve(
-                compatible_calc_id=compatability_key,
+                compatible_calc_id=compatibility_key,
                 hazard_model_id=hazard_model_id,
                 nloc_001=location.code,
                 nloc_0=location.downsample(1.0).code,
@@ -125,20 +155,18 @@ def save_aggregations(
 
 
 def get_realizations_dataset(vs30: Optional[int] = None, nloc_0: Optional[str] = None) -> ds.Dataset:
-    """
-    Get a pyarrow Dataset for realizations.
+    """Get a pyarrow Dataset for realizations.
 
     Optional parameters take advantage of partitioning of dataset for faster retrieval. The partitioning is
     assumed to be vs30/nloc_0. See toshi-hazard-store documentation for details.
 
-    Parameters:
+    Args:
         vs30: the site vs30
         nloc_0: the 1 degree grid location (e.g. '-41.0~175.0')
 
     Returns:
         dataset: the relization dataset
     """
-
     rlz_dir_tmp = str(RLZ_DIR)
     if vs30 is not None:
         rlz_dir_tmp += f"/vs30={vs30}"

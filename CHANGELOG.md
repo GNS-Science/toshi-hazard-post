@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.8.0] - XXX
+
+### Removed
+- Pass config file on command line.
+
 ## [0.7.0] - 2025-07-14
 
 ### Changed

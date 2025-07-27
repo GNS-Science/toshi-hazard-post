@@ -54,7 +54,7 @@ config_keyerror3 = get_config()
 del config_keyerror3['hazard_model']['nshm_model_version']
 config_keyerror3['hazard_model']['srm_logic_tree'] = config_filepath
 
-# the compatability key must exist
+# the compatibility key must exist
 config_error4 = get_config()
 config_error4['general']['compatibility_key'] = "NOT A COMPAT KEY"
 

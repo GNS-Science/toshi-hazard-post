@@ -1,6 +1,4 @@
-"""
-Classes for the combined SRM + GMCM logic trees used to define a seismic hazard model.
-"""
+"""Classes for the combined SRM + GMCM logic trees used to define a seismic hazard model."""
 
 import copy
 import logging
@@ -21,16 +19,18 @@ registry = nzshm_model.branch_registry.Registry()
 
 
 class HazardComponentBranch:
-    """
-    A component branch of the combined (SRM + GMCM) logic tree comprised of an srm branch and a gmcm branch. The
-    HazardComposite branch is the smallest unit necessary to create a hazard curve realization.
+    """A component branch of the combined (SRM + GMCM) logic tree comprised of an srm branch and a gmcm branch.
 
-    Parameters:
-        source_branch: the source
-        gmcm_branches: the ground motion models
+    The HazardComposite branch is the smallest unit necessary to create a hazard curve realization.
     """
 
     def __init__(self, source_branch: 'SourceBranch', gmcm_branches: Tuple['GMCMBranch']):
+        """Initialize a new HazardComponentBranch object.
+
+        Args:
+            source_branch: The source branch of the composite branch.
+            gmcm_branches: The GMCM branches that make up the composite branch.
+        """
         self.source_branch = source_branch
         self.gmcm_branches = gmcm_branches
         self.weight = math.prod([self.source_branch.weight] + [b.weight for b in self.gmcm_branches])
@@ -39,6 +39,11 @@ class HazardComponentBranch:
 
     @property
     def registry_identity(self) -> str:
+        """The registry identity of the component branch.
+
+        The registry identity is formed as concatinations of the source and gmcm identities.
+        {source branch id}{gmcm branch1}|{gmcm branch2}...
+        """
         return self.source_branch.registry_identity + '|'.join(
             [branch.registry_identity for branch in self.gmcm_branches]
         )
@@ -49,28 +54,32 @@ class HazardComponentBranch:
 
     @property
     def gmcm_hash_digest(self) -> str:
+        """The hash digest of the gmcm branch."""
         if len(self.gmcm_branches) != 1:
             raise NotImplementedError("multiple gmcm branches for a component branch is not implemented")
         return registry.gmm_registry.get_by_identity(self.gmcm_branches[0].registry_identity).hash_digest
 
     @property
     def source_hash_digest(self) -> str:
+        """The hash digest of the source branch."""
         return registry.source_registry.get_by_identity(self.source_branch.registry_identity).hash_digest
 
 
 class HazardCompositeBranch:
-    """
-    A composite branch of the combined (SRM + GMCM) logic tree.
+    """A composite branch of the combined (SRM + GMCM) logic tree.
 
     A HazardCompositeBranch will have multiple sources and
     multiple ground motion models and is formed by taking all combinations of branches from the branch sets. The
     HazardComposite branch is an Iterable and will return HazardComponentBranch when iterated.
-
-    Parameters:
-        branches: the source-ground motion pairs that comprise the HazardCompositeBranch
     """
 
     def __init__(self, branches: list[HazardComponentBranch], source_weight: float):
+        """Initialize a new HazardCompositeBranch object.
+
+        Args:
+            branches: The source-ground motion pairs that comprise the HazardCompositeBranch
+            source_weight: The weight of the source branch.
+        """
         self.branches = branches
 
         # to avoid double counting gmcm branches when calculating the weight we find the unique gmcm branches
@@ -84,10 +93,12 @@ class HazardCompositeBranch:
         self.weight = math.prod(gsim_weights) * source_weight
 
     def __iter__(self) -> 'HazardCompositeBranch':
+        """Iterate over all HazardComponentBranches that make up the HazardCompositeBranch."""
         self.__counter = 0
         return self
 
     def __next__(self) -> HazardComponentBranch:
+        """Get the next HazardComponentBranch."""
         if self.__counter >= len(self.branches):
             raise StopIteration
         else:
@@ -97,15 +108,15 @@ class HazardCompositeBranch:
 
 # TODO: move to nzhsm_model?
 class HazardLogicTree:
-    """
-    The combined (SRM + GMCM) logic tree needed to define the complete hazard model.
-
-    Parameters:
-        srm_logic_tree: the source (SRM) logic tree
-        gmcm_logic_tree: the ground motion (GMCM) logic tree
-    """
+    """The combined (SRM + GMCM) logic tree needed to define the complete hazard model."""
 
     def __init__(self, srm_logic_tree: 'SourceLogicTree', gmcm_logic_tree: 'GMCMLogicTree') -> None:
+        """Initialize a new HazardLogicTree object.
+
+        Args:
+            srm_logic_tree: The seismicity rate model logic tree.
+            gmcm_logic_tree: The ground motion characterisation model logic tree.
+        """
         self.srm_logic_tree = srm_logic_tree
 
         # remove the TRTs from the GMCM logic tree that are not in the SRM logic tree
@@ -123,9 +134,9 @@ class HazardLogicTree:
 
     @property
     def composite_branches(self) -> list[HazardCompositeBranch]:
-        """
-        Get the composite branches combining the SRM branches with the appropraite GMCM branches by matching tectonic
-        region type.
+        """Get the composite branches combining the SRM branches with the appropraite GMCM branches.
+
+        The tectonic region types will be matched between SRM and GMCM branches.
 
         Returns:
             composite_branches: the composite branches that make up all full realizations of the complete hazard
@@ -137,8 +148,7 @@ class HazardLogicTree:
 
     @property
     def component_branches(self) -> list[HazardComponentBranch]:
-        """
-        Get the component branches (each SRM branch with all possible GMCM branch matches)
+        """Get the component branches (each SRM branch with all possible GMCM branch matches).
 
         Returns:
             component_branches: the component branches that make up the independent realizations of the logic tree
@@ -149,8 +159,7 @@ class HazardLogicTree:
 
     @property
     def weights(self) -> 'npt.NDArray':
-        """
-        The weights for every enumerated branch (srm + gmcm) of the logic tree.
+        """The weights for every enumerated branch (srm + gmcm) of the logic tree.
 
         Returns:
             weights: one dimensional array of branch weights
@@ -159,9 +168,10 @@ class HazardLogicTree:
 
     @property
     def branch_hash_table(self) -> list[list[str]]:
-        """
-        The simplist structure used to iterate though the realization hashes. Each element of the list represents a
-        composite branch as a list of hashes of the component branches that make up the composite branch.
+        """The simplist structure used to iterate though the realization hashes.
+
+        Each element of the list represents a composite branch as a list of hashes of the component branches
+        that make up the composite branch.
 
         Returns:
             hash_list: the list of composite branches, each of wich is a list of component branch hashes.

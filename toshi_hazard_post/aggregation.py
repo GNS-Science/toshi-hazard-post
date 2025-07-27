@@ -1,6 +1,4 @@
-"""
-Module for coordinating and launching aggregation jobs.
-"""
+"""Module for coordinating and launching aggregation jobs."""
 
 import itertools
 import logging
@@ -35,7 +33,7 @@ log = logging.getLogger(__name__)
 PARTITION_RESOLUTION = 1.0
 
 
-def generate_agg_jobs(
+def _generate_agg_jobs(
     sites: list[Site],
     imts: list[str],
     compatibility_key: str,
@@ -71,13 +69,11 @@ def generate_agg_jobs(
 
 
 def run_aggregation(args: AggregationArgs) -> None:
-    """
-    Main entry point for running aggregation caculations.
+    """Main entry point for running aggregation caculations.
 
-    Parameters:
-        config: the aggregation configuration
+    Args:
+        args: the aggregation configuration
     """
-
     time0 = time.perf_counter()
     # get the sites
     log.info("getting sites . . .")
@@ -139,7 +135,7 @@ def run_aggregation(args: AggregationArgs) -> None:
     futures = {}
     # ds1 = get_realizations_dataset()
     with ProcessPoolExecutor(max_workers=NUM_WORKERS) as executor:
-        for vs30, location, imt, filepath in generate_agg_jobs(
+        for vs30, location, imt, filepath in _generate_agg_jobs(
             sites,
             imts,
             args.general.compatibility_key,

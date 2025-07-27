@@ -32,14 +32,14 @@ def patch_rlz(monkeypatch):
 
 
 def test_table_without_partition(patch_rlz):
-    """we can retrieve a dataset without using the partitioning and filter on vs30 and nloc_0"""
+    """We can retrieve a dataset without using the partitioning and filter on vs30 and nloc_0."""
     dataset = get_realizations_dataset()
     batch_table = get_batch_table(dataset, compatibility_key, sources_digests, gmms_digests, vs30, nloc_0, imts)
     get_job_datatable(batch_table, location, imts[0], n_expected)
 
 
 def test_table_with_partition(patch_rlz):
-    """we can retrieve a dataset using the partitioning no need to filter on vs30 and nloc_0"""
+    """We can retrieve a dataset using the partitioning no need to filter on vs30 and nloc_0."""
     dataset = get_realizations_dataset(vs30, nloc_0)
     batch_table = get_batch_table(dataset, compatibility_key, sources_digests, gmms_digests, vs30, nloc_0, imts)
     get_job_datatable(batch_table, location, imts[0], n_expected)

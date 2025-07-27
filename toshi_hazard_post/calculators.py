@@ -16,14 +16,13 @@ log = logging.getLogger(__name__)
 def prob_to_rate(prob: 'npt.NDArray', inv_time: float) -> 'npt.NDArray':
     """Convert probability of exceedance to rate assuming Poisson distribution.
 
-    Parameters:
+    Args:
         prob: probability of exceedance
         inv_time: time period for probability (e.g. 1.0 for annual probability)
 
     Returns:
         rate: return rate in inv_time
     """
-
     return -np.log(1.0 - prob) / inv_time
 
 
@@ -31,27 +30,26 @@ def prob_to_rate(prob: 'npt.NDArray', inv_time: float) -> 'npt.NDArray':
 def rate_to_prob(rate: 'npt.NDArray', inv_time: float) -> 'npt.NDArray':
     """Convert rate to probabiility of exceedance assuming Poisson distribution.
 
-    Parameters:
+    Args:
         rate: rate over inv_time
         inv_time: time period of rate (e.g. 1.0 for annual rate)
 
     Returns:
         prob: probability of exceedance in inv_time
     """
-
     return 1.0 - np.exp(-inv_time * rate)
 
 
 def weighted_avg_and_std(values: 'npt.NDArray', weights: 'npt.NDArray') -> Tuple['npt.NDArray', 'npt.NDArray']:
     """Calculate weighted average and standard deviation of an array.
 
-    Parameters:
+    Args:
         values: array of values (branch, IMTL)
         weights: weights of values (branch, )
 
     Returns:
-        mean: weighted mean (IMTL, )
-        std: standard deviation (IMTL, )
+        A tuple of (mean, std) where mean is the weighted mean and
+            std is the standard devaition both with size (IMTL, ).
     """
     average = np.average(values, weights=weights, axis=0)
     # Fast and numerically precise:
@@ -60,10 +58,9 @@ def weighted_avg_and_std(values: 'npt.NDArray', weights: 'npt.NDArray') -> Tuple
 
 
 def cov(mean: 'npt.NDArray', std: 'npt.NDArray') -> 'npt.NDArray':
-    """
-    Calculate the coeficient of variation handling zero mean by setting cov to zero
+    """Calculate the coeficient of variation handling zero mean by setting cov to zero.
 
-    Parameters:
+    Args:
         mean: array of mean values
         std: array of standard deviation values
 
@@ -78,9 +75,9 @@ def cov(mean: 'npt.NDArray', std: 'npt.NDArray') -> 'npt.NDArray':
 def weighted_quantiles(
     values: 'npt.NDArray', weights: 'npt.NDArray', quantiles: Union[list[float], 'npt.NDArray']
 ) -> 'npt.NDArray':
-    """Calculate weighted quantiles of array
+    """Calculate weighted quantiles of array.
 
-    Parameters:
+    Args:
         values: values of data
         weights: weights of values. Same length as values
         quantiles: quantiles to be found. Values should be in [0,1]
@@ -88,7 +85,6 @@ def weighted_quantiles(
     Returns:
         weighted quantiles
     """
-
     sorter = np.argsort(values, kind='stable')
     values = values[sorter]
     weights = weights[sorter]

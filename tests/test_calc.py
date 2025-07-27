@@ -139,6 +139,6 @@ def test_component_dict():
     d = {'sources_digest': ['abc', 'def'], 'gmms_digest': ['123', '456'], 'rates': [1, 2]}
     df = pd.DataFrame(d)
 
-    component_dict = aggregation_calc.create_component_dict(df)
+    component_dict = aggregation_calc._create_component_dict(df)
 
     assert list(component_dict.keys()) == ['abc123', 'def456']
