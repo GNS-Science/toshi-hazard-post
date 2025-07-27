@@ -12,7 +12,7 @@ import pyarrow.dataset as ds
 from toshi_hazard_store.model.hazard_models_pydantic import HazardAggregateCurve
 from toshi_hazard_store.model.pyarrow import pyarrow_aggr_dataset, pyarrow_dataset
 
-from toshi_hazard_post.local_config import get_config
+from toshi_hazard_post.local_config import AGG_DIR, RLZ_DIR
 
 log = logging.getLogger(__name__)
 
@@ -117,9 +117,7 @@ def save_aggregations(
                 values=hazard[i, :],
             )
 
-    config = get_config()
-
-    agg_dir, filesystem = pyarrow_dataset.configure_output(config['AGG_DIR'])
+    agg_dir, filesystem = pyarrow_dataset.configure_output(AGG_DIR)
     partitioning = ['vs30', 'imt', 'nloc_001']
     pyarrow_aggr_dataset.append_models_to_dataset(
         models=generate_models(), base_dir=agg_dir, filesystem=filesystem, partitioning=partitioning
@@ -141,8 +139,7 @@ def get_realizations_dataset(vs30: Optional[int] = None, nloc_0: Optional[str] =
         dataset: the relization dataset
     """
 
-    config = get_config()
-    rlz_dir_tmp = config['RLZ_DIR']
+    rlz_dir_tmp = str(RLZ_DIR)
     if vs30 is not None:
         rlz_dir_tmp += f"/vs30={vs30}"
         if nloc_0 is not None:

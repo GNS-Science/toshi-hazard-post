@@ -1,5 +1,4 @@
 import importlib.resources as resources
-import os
 from pathlib import Path
 
 import numpy as np
@@ -8,6 +7,7 @@ from toshi_hazard_store.model.pyarrow import pyarrow_dataset
 
 from toshi_hazard_post.aggregation import run_aggregation
 from toshi_hazard_post.aggregation_args import load_input_args
+import toshi_hazard_post.data
 
 fixture_dir = resources.files('tests.fixtures.end_to_end')
 args_filepath = fixture_dir / 'hazard.toml'
@@ -16,12 +16,15 @@ args_filepath = fixture_dir / 'hazard.toml'
 aggs_expected_filepath = fixture_dir / 'aggregations_275_PGA_WLG.npy'
 
 
-def test_end_to_end(tmp_path):
+def test_end_to_end(monkeypatch, tmp_path):
     probs_expected = np.load(aggs_expected_filepath)
 
-    os.environ["THP_RLZ_DIR"] = str(Path(__file__).parent / 'fixtures/end_to_end/rlz')
-    os.environ["THP_AGG_DIR"] = str(tmp_path)
-    os.environ["THP_NUM_WORKERS"] = "1"
+    monkeypatch.setattr(toshi_hazard_post.data, 'AGG_DIR', str(tmp_path))
+    monkeypatch.setattr(toshi_hazard_post.data, 'RLZ_DIR', str(Path(__file__).parent / 'fixtures/end_to_end/rlz'))
+
+    # os.environ["THP_RLZ_DIR"] = str(Path(__file__).parent / 'fixtures/end_to_end/rlz')
+    # os.environ["THP_AGG_DIR"] = str(tmp_path)
+    # os.environ["THP_NUM_WORKERS"] = "1"
 
     agg_args = load_input_args(args_filepath)
     run_aggregation(agg_args)

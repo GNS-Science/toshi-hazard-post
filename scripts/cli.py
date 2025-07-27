@@ -24,11 +24,7 @@ def thp():
 
 @thp.command(name='aggregate', help='aggregate hazard curves')
 @click.argument('input_file', type=click.Path(exists=True))
-@click.option('--config-file', type=click.Path(exists=True))
-def aggregate(input_file, config_file):
-
-    if config_file:
-        os.environ['THP_ENV_FILE'] = str(config_file)
+def aggregate(input_file):
 
     args = load_input_args(input_file)
     click.echo("Toshi Hazard Post: hazard curve aggregation")

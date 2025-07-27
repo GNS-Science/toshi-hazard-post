@@ -2,11 +2,7 @@
 Module for setting the compute configuration. Configuration parameters can be set by default .env
 file, user specified file, or environment variable, with  that order of  precedence.
 
-Environment varaible parameters are uppercase, config file is case insensitive.
-
-To use the local configuration, set the envvar 'THP_ENV_FILE' to the desired config file path. Then call
-get_config() inside a function. Note that get_config() must be called in function scope. If called in module scope,
-changes to 'THP_ENV_FILE' will not be effective
+Environment variabiles can be overwritten with a .env file or a file specified by the value of THP_ENV_FILE.
 
 Parameters:
     THP_NUM_WORKERS: number of parallel processes. if == 1, will run without spawning new processes.
@@ -17,7 +13,6 @@ Parameters:
 import os
 import tempfile
 from pathlib import Path
-from typing import Any
 
 from dotenv import load_dotenv
 
@@ -25,14 +20,18 @@ DEFAULT_NUM_WORKERS = 1
 DEFAULT_FS = 'LOCAL'
 
 
-def get_config() -> dict[str, Any]:
-    load_dotenv(os.getenv('THP_ENV_FILE', '.env'))
-    config = dict(
-        NUM_WORKERS=int(os.getenv('THP_NUM_WORKERS', DEFAULT_NUM_WORKERS)),
-        RLZ_DIR=os.getenv('THP_RLZ_DIR'),
-        AGG_DIR=os.getenv('THP_AGG_DIR'),
-        WORKING_DIR=Path(os.getenv('THP_WORKING_DIR', tempfile.gettempdir())).expanduser(),
-    )
-    if not config['WORKING_DIR'].is_dir():  # type: ignore
-        raise FileNotFoundError(f"WORKING_DIR {config['WORKING_DIR']} is not a directory")
-    return config
+def dir_path_env(name, default='') -> Path:
+    path = Path(os.getenv(name, default)).expanduser()
+    if not path.is_dir():
+        raise ValueError("{name} must be a directory but {path} was assigned.")
+    return Path(path)
+
+
+load_dotenv(os.getenv('THP_ENV_FILE', '.env'))
+NUM_WORKERS = int(os.getenv('THP_NUM_WORKERS', DEFAULT_NUM_WORKERS))
+RLZ_DIR = dir_path_env('THP_RLZ_DIR')
+AGG_DIR = dir_path_env('THP_AGG_DIR')
+WORKING_DIR = dir_path_env('THP_WORKING_DIR', tempfile.gettempdir())
+
+if not WORKING_DIR.is_dir():
+    raise FileNotFoundError(f"{WORKING_DIR=} is not a directory")
