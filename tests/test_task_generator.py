@@ -3,7 +3,7 @@ from itertools import product
 import pytest
 from nzshm_common.location.coded_location import CodedLocation
 
-from toshi_hazard_post.aggregation import generate_agg_jobs
+from toshi_hazard_post.aggregation import _generate_agg_jobs
 from toshi_hazard_post.aggregation_setup import Site
 
 
@@ -32,7 +32,7 @@ def test_task_generator(sites, monkeypatch):
 
     imts = ["PGA", "SA(1.0)"]
     i = 0
-    for _ in generate_agg_jobs(sites, imts, None, None, None):
+    for _ in _generate_agg_jobs(sites, imts, None, None, None):
         i += 1
 
     assert i == len(sites) * 2

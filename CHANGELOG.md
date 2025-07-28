@@ -1,12 +1,16 @@
 # Changelog
 
-## [0.7.0] - 2025-07-14
+## [0.7.0] - 2025-07-28
 
 ### Changed
 - Batch load data for faster access to toshi-hazard-store
 - Save realization data to file to avoid memory copy to processes
 - Most timing log messages are debug instead of info level
 - Use simpler concurrent.futures instead of multiprocessing
+- Improved docstrings.
+
+### Removed
+- Pass config file on command line.
 
 ## [0.6.0] - 2025-06-06
 

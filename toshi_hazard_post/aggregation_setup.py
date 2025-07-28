@@ -1,3 +1,5 @@
+"""Classes and functions used to setup the aggregation jobs."""
+
 import csv
 from collections import namedtuple
 from dataclasses import dataclass
@@ -13,14 +15,22 @@ from nzshm_model.logic_tree import GMCMLogicTree, SourceLogicTree
 
 @dataclass
 class Site:
+    """A hazard site defined by location and vs30.
+
+    Attributes:
+        location: the location of the site.
+        vs30: the vs30 of the site.
+    """
+
     location: CodedLocation
     vs30: int
 
     def __repr__(self):
+        """The string representation of a Site object."""
         return f"{self.location.lat}, {self.location.lon}, vs30={self.vs30}"
 
 
-def get_vs30s(site_filepath: Union[str, Path]) -> Generator[int, None, None]:
+def _get_vs30s(site_filepath: Union[str, Path]) -> Generator[int, None, None]:
     with Path(site_filepath).open() as site_file:
         reader = csv.reader(site_file)
         SiteCSV = namedtuple("SiteCSV", next(reader), rename=True)  # type:ignore
@@ -34,13 +44,14 @@ def get_logic_trees(
     srm_logic_tree_filepath: Optional[Union[str, Path]] = None,
     gmcm_logic_tree_filepath: Optional[Union[str, Path]] = None,
 ) -> tuple[SourceLogicTree, GMCMLogicTree]:
-    """Get a source and ground motion logic tree given a NZ NSHM model version availble from nzhsm-model
-    and/or filepaths to logic trees. Any logic tree files passed will take precidence over the logic
-    trees from the model version (i.e. if nshm_model_version an srm_logic_tree_filepath are both passed,
-    the ground motion logic tree will come from the nshm_model_version but the source logic tree will
-    come from the file).
+    """Get a source and ground motion logic tree given a NZ NSHM model version.
 
-    Parameters:
+    The model can be defined by a nzhsm-model version from the nzshm-model library and/or filepaths to logic trees.
+    Any logic tree files passed will take precidence over the logic trees from the model version
+    (i.e. if nshm_model_version an srm_logic_tree_filepath are both passed, the ground motion logic tree will
+    come from the nshm_model_version but the source logic tree will come from the file).
+
+    Args:
         nshm_model_version: model version from nzshm-model package
         srm_logic_tree_filepath: path to a json file defining a SourceLogicTree object
         gmcm_logic_tree_filepath: path to a json file defining a GMCMLogicTree object
@@ -48,7 +59,6 @@ def get_logic_trees(
     Returns:
         a tuple of source logic tree and ground motion logic tree
     """
-
     if nshm_model_version:
         model = get_model_version(nshm_model_version)
         srm_logic_tree = model.source_logic_tree
@@ -67,13 +77,13 @@ def get_sites(
     locations: Optional[Iterable[str]] = None,
     vs30s: Optional[Iterable[int]] = None,
 ) -> list[Site]:
-    """
-    Get the sites (combined location and vs30) at which to calculate hazard. Either a locations_file
-    or locations can be passed, but not both. If the locations_file contains vs30 values, they
-    will be used. If the vs30s argument is passed they will be iterated over as uniform vs30
+    """Get the sites (combined location and vs30) at which to calculate hazard.
+
+    Either a locations_file or locations can be passed, but not both. If the locations_file contains vs30
+    values, they will be used. If the vs30s argument is passed they will be iterated over as uniform vs30
     values (e.g. for 4 locations and 2 vs30s, 8 location-vs30 pairs will be returned).
 
-    Parameters:
+    Args:
         locations_file: file path to a csv file of site lat,lon, and optionally vs30 values
         locations: location identifiers. Identifiers can be anything accepted
         by nzshm_common.location.location.get_locations
@@ -88,7 +98,6 @@ def get_sites(
         ValueError: If locations but not vs30s passed
         ValueError: If neither locations or locations_file passed
     """
-
     if locations_file and locations:
         raise ValueError("cannot provide both locations and locations_file")
 
@@ -100,7 +109,7 @@ def get_sites(
     if vs30s:
         sites = [Site(location, vs30) for location, vs30 in product(coded_locations, vs30s)]
     elif locations_file:
-        vs30s = list(get_vs30s(locations_file))
+        vs30s = list(_get_vs30s(locations_file))
         sites = list(map(Site, coded_locations, vs30s))
     else:
         raise ValueError(

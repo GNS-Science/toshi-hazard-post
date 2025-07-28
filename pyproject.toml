@@ -1,6 +1,6 @@
 [project]
 name = "toshi-hazard-post"
-version = "0.6.0"
+version = "0.7.0"
 readme = "README.md"
 description = "Hazard post-processing pipeline as serverless AWS infrastructure."
 authors = [
@@ -58,6 +58,7 @@ types-toml = "^0.10.8.20240310"
 types-requests = "^2.32.0.20241016"
 tox = "^4.24.1"
 mypy = "^1.15.0"
+flake8-docstrings = "^1.7.0"
 
 
 [tool.poetry.group.doc.dependencies]

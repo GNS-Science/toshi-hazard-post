@@ -1,6 +1,4 @@
-"""
-Module for coordinating and launching aggregation jobs.
-"""
+"""Module for coordinating and launching aggregation jobs."""
 
 import itertools
 import logging
@@ -20,7 +18,7 @@ from toshi_hazard_post.aggregation_args import AggregationArgs
 from toshi_hazard_post.aggregation_calc import AggSharedArgs, AggTaskArgs, calc_aggregation
 from toshi_hazard_post.aggregation_setup import Site, get_logic_trees, get_sites
 from toshi_hazard_post.data import get_batch_table, get_job_datatable, get_realizations_dataset
-from toshi_hazard_post.local_config import get_config
+from toshi_hazard_post.local_config import NUM_WORKERS, WORKING_DIR
 from toshi_hazard_post.logic_tree import HazardLogicTree
 
 if TYPE_CHECKING:
@@ -35,7 +33,7 @@ log = logging.getLogger(__name__)
 PARTITION_RESOLUTION = 1.0
 
 
-def generate_agg_jobs(
+def _generate_agg_jobs(
     sites: list[Site],
     imts: list[str],
     compatibility_key: str,
@@ -61,8 +59,7 @@ def generate_agg_jobs(
             )
             for location, imt in itertools.product(location_bin.locations, imts):
                 job_datatable = get_job_datatable(batch_datatable, location, imt, n_expected)
-                working_dir = get_config()['WORKING_DIR']
-                filepath = working_dir / f"{vs30}_{nloc_0}_{location.downsample(0.001).code}_{imt}_dataset.dat"
+                filepath = WORKING_DIR / f"{vs30}_{nloc_0}_{location.downsample(0.001).code}_{imt}_dataset.dat"
                 log.debug("writing file %s for agg job %s, %s" % (filepath, location.code, imt))
                 t0 = time.perf_counter()
                 orc.write_table(job_datatable, filepath, compression='snappy')
@@ -72,14 +69,11 @@ def generate_agg_jobs(
 
 
 def run_aggregation(args: AggregationArgs) -> None:
-    """
-    Main entry point for running aggregation caculations.
+    """Main entry point for running aggregation caculations.
 
-    Parameters:
-        config: the aggregation configuration
+    Args:
+        args: the aggregation configuration
     """
-    num_workers = get_config()['NUM_WORKERS']
-
     time0 = time.perf_counter()
     # get the sites
     log.info("getting sites . . .")
@@ -136,12 +130,12 @@ def run_aggregation(args: AggregationArgs) -> None:
 
     time_parallel_start = time.perf_counter()
     num_jobs = 0
-    log.info("starting %d calculations with %d workers" % (len(sites) * len(imts), num_workers))
+    log.info("starting %d calculations with %d workers" % (len(sites) * len(imts), NUM_WORKERS))
 
     futures = {}
     # ds1 = get_realizations_dataset()
-    with ProcessPoolExecutor(max_workers=num_workers) as executor:
-        for vs30, location, imt, filepath in generate_agg_jobs(
+    with ProcessPoolExecutor(max_workers=NUM_WORKERS) as executor:
+        for vs30, location, imt, filepath in _generate_agg_jobs(
             sites,
             imts,
             args.general.compatibility_key,

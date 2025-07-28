@@ -1,8 +1,9 @@
 from toshi_hazard_post.data import get_batch_table, get_job_datatable, get_realizations_dataset
+import pytest
+import toshi_hazard_post.data
 from toshi_hazard_post.aggregation_setup import get_logic_trees
 from toshi_hazard_post.logic_tree import HazardLogicTree
 from nzshm_common.location import get_locations
-import os
 from pathlib import Path
 import importlib.resources as resources
 
@@ -25,19 +26,20 @@ sources_digests = [branch.source_hash_digest for branch in component_branches]
 n_expected = 270
 
 
-def test_table_without_partition():
-    """we can retrieve a dataset without using the partitioning and filter on vs30 and nloc_0"""
-    os.environ["THP_RLZ_DIR"] = str(Path(__file__).parent / 'fixtures/end_to_end/rlz')
+@pytest.fixture
+def patch_rlz(monkeypatch):
+    monkeypatch.setattr(toshi_hazard_post.data, 'RLZ_DIR', str(Path(__file__).parent / 'fixtures/end_to_end/rlz'))
 
+
+def test_table_without_partition(patch_rlz):
+    """We can retrieve a dataset without using the partitioning and filter on vs30 and nloc_0."""
     dataset = get_realizations_dataset()
     batch_table = get_batch_table(dataset, compatibility_key, sources_digests, gmms_digests, vs30, nloc_0, imts)
     get_job_datatable(batch_table, location, imts[0], n_expected)
 
 
-def test_table_with_partition():
-    """we can retrieve a dataset using the partitioning no need to filter on vs30 and nloc_0"""
-    os.environ["THP_RLZ_DIR"] = str(Path(__file__).parent / 'fixtures/end_to_end/rlz')
-
+def test_table_with_partition(patch_rlz):
+    """We can retrieve a dataset using the partitioning no need to filter on vs30 and nloc_0."""
     dataset = get_realizations_dataset(vs30, nloc_0)
     batch_table = get_batch_table(dataset, compatibility_key, sources_digests, gmms_digests, vs30, nloc_0, imts)
     get_job_datatable(batch_table, location, imts[0], n_expected)
