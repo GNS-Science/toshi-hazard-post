@@ -1,7 +1,7 @@
 """Module for setting the compute configuration.
 
 Configuration parameters can be set by a file and/or environment variables. Environment variables will take
-precidence over values in the file file. The default the file location is ./.env, but can be set with THP_ENV_FILE.
+precedence over values in the file file. The default the file location is ./.env, but can be set with THP_ENV_FILE.
 
 Args:
     THP_NUM_WORKERS: number of parallel processes. if == 1, will run without spawning new processes.
