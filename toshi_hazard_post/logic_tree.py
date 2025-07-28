@@ -168,7 +168,7 @@ class HazardLogicTree:
 
     @property
     def branch_hash_table(self) -> list[list[str]]:
-        """The simplist structure used to iterate though the realization hashes.
+        """The simplest structure used to iterate though the realization hashes.
 
         Each element of the list represents a composite branch as a list of hashes of the component branches
         that make up the composite branch.
