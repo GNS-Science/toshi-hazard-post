@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.7.1] - 2025-08-18
+### Added
+ - Optional argument for realization dataset location to override environment variable.
+
 ## [0.7.0] - 2025-07-28
 
 ### Changed
