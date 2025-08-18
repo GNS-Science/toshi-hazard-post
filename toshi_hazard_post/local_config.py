@@ -19,27 +19,17 @@ DEFAULT_NUM_WORKERS = 1
 DEFAULT_FS = 'LOCAL'
 
 
-def _dir_path_env(name, default='') -> Path:
-    path = Path(os.getenv(name, default)).expanduser()
-    if not path.is_dir():
-        raise ValueError(f"{name} must be a directory but {path} was assigned.")
-    return Path(path)
-
-
-def _dir_s3_path_env(name, default='') -> Path | str:
-    if name[:5] == "s3://":
+def _dir_path_env(name, default='', can_be_s3=False) -> str:
+    if can_be_s3 and name[:5] == "s3://":
         return name
     path = Path(os.getenv(name, default)).expanduser()
     if not path.is_dir():
-        raise ValueError(f"{name} must be a directory but {path} was assigned.")
-    return Path(path)
+        raise ValueError(f"{name} must be a directory but {path} was given.")
+    return str(path)
 
 
 load_dotenv(os.getenv('THP_ENV_FILE', '.env'))
 NUM_WORKERS = int(os.getenv('THP_NUM_WORKERS', DEFAULT_NUM_WORKERS))
-RLZ_DIR = _dir_s3_path_env('THP_RLZ_DIR')
-AGG_DIR = _dir_s3_path_env('THP_AGG_DIR')
+RLZ_DIR = _dir_path_env('THP_RLZ_DIR', can_be_s3=True)
+AGG_DIR = _dir_path_env('THP_AGG_DIR', can_be_s3=True)
 WORKING_DIR = _dir_path_env('THP_WORKING_DIR', tempfile.gettempdir())
-
-if not WORKING_DIR.is_dir():
-    raise FileNotFoundError(f"{WORKING_DIR=} is not a directory")

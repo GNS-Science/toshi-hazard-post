@@ -205,6 +205,17 @@ def build_branch_rates(branch_hash_table: 'npt.NDArray', component_rates: Dict[s
 
 
 def create_component_dict(component_rates: 'pd.DataFrame') -> Dict[str, 'npt.NDArray']:
+    """Convert component branch rates DataFrame to dict.
+
+    The 'digest' is constructed by concatenating sources digest and gmms digest. The source and gmm digests
+    are then dropped.
+
+    Args:
+        component_rates: data frame with the component branch rates.
+
+    Returns:
+        The dictionary of rates keyed by the branch digest.
+    """
     component_rates['digest'] = component_rates['sources_digest'] + component_rates['gmms_digest']
     component_rates.drop(['sources_digest', 'gmms_digest'], axis=1)
     component_rates.set_index('digest', inplace=True)
