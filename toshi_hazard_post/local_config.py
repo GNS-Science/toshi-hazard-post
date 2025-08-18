@@ -26,10 +26,19 @@ def _dir_path_env(name, default='') -> Path:
     return Path(path)
 
 
+def _dir_s3_path_env(name, default='') -> Path | str:
+    if name[:5] == "s3://":
+        return name
+    path = Path(os.getenv(name, default)).expanduser()
+    if not path.is_dir():
+        raise ValueError(f"{name} must be a directory but {path} was assigned.")
+    return Path(path)
+
+
 load_dotenv(os.getenv('THP_ENV_FILE', '.env'))
 NUM_WORKERS = int(os.getenv('THP_NUM_WORKERS', DEFAULT_NUM_WORKERS))
-RLZ_DIR = _dir_path_env('THP_RLZ_DIR')
-AGG_DIR = _dir_path_env('THP_AGG_DIR')
+RLZ_DIR = _dir_s3_path_env('THP_RLZ_DIR')
+AGG_DIR = _dir_s3_path_env('THP_AGG_DIR')
 WORKING_DIR = _dir_path_env('THP_WORKING_DIR', tempfile.gettempdir())
 
 if not WORKING_DIR.is_dir():
