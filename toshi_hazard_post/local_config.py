@@ -22,7 +22,7 @@ DEFAULT_FS = 'LOCAL'
 def _dir_path_env(name, default='') -> Path:
     path = Path(os.getenv(name, default)).expanduser()
     if not path.is_dir():
-        raise ValueError("{name} must be a directory but {path} was assigned.")
+        raise ValueError(f"{name} must be a directory but {path} was assigned.")
     return Path(path)
 
 
