@@ -20,12 +20,13 @@ DEFAULT_FS = 'LOCAL'
 
 
 def _dir_path_env(name, default='', can_be_s3=False) -> str:
-    if can_be_s3 and name[:5] == "s3://":
-        return name
-    path = Path(os.getenv(name, default)).expanduser()
-    if not path.is_dir():
-        raise ValueError(f"{name} must be a directory but {path} was given.")
-    return str(path)
+    dir_path = os.getenv(name, default)
+    if can_be_s3 and dir_path[:5] == "s3://":
+        return dir_path
+    dir_path = Path(dir_path).expanduser()
+    if not dir_path.is_dir():
+        raise ValueError(f"{name} must be a directory but {dir_path} was given.")
+    return str(dir_path)
 
 
 load_dotenv(os.getenv('THP_ENV_FILE', '.env'))
