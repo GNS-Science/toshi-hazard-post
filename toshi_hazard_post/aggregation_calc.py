@@ -204,7 +204,18 @@ def build_branch_rates(branch_hash_table: 'npt.NDArray', component_rates: Dict[s
     return np.array([calc_composite_rates(branch, component_rates, nimtl) for branch in branch_hash_table])
 
 
-def _create_component_dict(component_rates: 'pd.DataFrame') -> Dict[str, 'npt.NDArray']:
+def create_component_dict(component_rates: 'pd.DataFrame') -> Dict[str, 'npt.NDArray']:
+    """Convert component branch rates DataFrame to dict.
+
+    The 'digest' is constructed by concatenating sources digest and gmms digest. The source and gmm digests
+    are then dropped.
+
+    Args:
+        component_rates: data frame with the component branch rates.
+
+    Returns:
+        The dictionary of rates keyed by the branch digest.
+    """
     component_rates['digest'] = component_rates['sources_digest'] + component_rates['gmms_digest']
     component_rates.drop(['sources_digest', 'gmms_digest'], axis=1)
     component_rates.set_index('digest', inplace=True)
@@ -249,7 +260,7 @@ def calc_aggregation(task_args: AggTaskArgs, shared_args: AggSharedArgs) -> None
     time2 = time.perf_counter()
     log.debug('worker %s: time to convert_probs_to_rates() % 0.2f' % (worker_name, time2 - time1))
 
-    component_rates = _create_component_dict(component_rates)
+    component_rates = create_component_dict(component_rates)
 
     time3 = time.perf_counter()
     log.debug('worker %s: time to convert to dict and set digest index %0.2f seconds' % (worker_name, time3 - time2))

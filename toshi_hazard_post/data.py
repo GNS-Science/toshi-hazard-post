@@ -2,6 +2,7 @@
 
 import logging
 import time
+from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 
 import pyarrow as pa
@@ -154,7 +155,9 @@ def save_aggregations(
     )
 
 
-def get_realizations_dataset(vs30: Optional[int] = None, nloc_0: Optional[str] = None) -> ds.Dataset:
+def get_realizations_dataset(
+    vs30: Optional[int] = None, nloc_0: Optional[str] = None, rlz_dir: Optional[str | Path] = None
+) -> ds.Dataset:
     """Get a pyarrow Dataset for realizations.
 
     Optional parameters take advantage of partitioning of dataset for faster retrieval. The partitioning is
@@ -163,11 +166,12 @@ def get_realizations_dataset(vs30: Optional[int] = None, nloc_0: Optional[str] =
     Args:
         vs30: the site vs30
         nloc_0: the 1 degree grid location (e.g. '-41.0~175.0')
+        rlz_dir: location of realization dataset. If not passed, function will use env var.
 
     Returns:
         dataset: the relization dataset
     """
-    rlz_dir_tmp = str(RLZ_DIR)
+    rlz_dir_tmp = str(RLZ_DIR) if rlz_dir is None else str(rlz_dir)
     if vs30 is not None:
         rlz_dir_tmp += f"/vs30={vs30}"
         if nloc_0 is not None:

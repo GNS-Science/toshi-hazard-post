@@ -59,7 +59,7 @@ def _generate_agg_jobs(
             )
             for location, imt in itertools.product(location_bin.locations, imts):
                 job_datatable = get_job_datatable(batch_datatable, location, imt, n_expected)
-                filepath = WORKING_DIR / f"{vs30}_{nloc_0}_{location.downsample(0.001).code}_{imt}_dataset.dat"
+                filepath = Path(WORKING_DIR) / f"{vs30}_{nloc_0}_{location.downsample(0.001).code}_{imt}_dataset.dat"
                 log.debug("writing file %s for agg job %s, %s" % (filepath, location.code, imt))
                 t0 = time.perf_counter()
                 orc.write_table(job_datatable, filepath, compression='snappy')
