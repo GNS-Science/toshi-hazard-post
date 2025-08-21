@@ -148,10 +148,6 @@ def save_aggregations(
                 values=hazard[i, :],
             )
 
-    import numpy as np 
-    hazard_path = str(Path(AGG_DIR) / 'hazard.npy')
-    np.save(hazard_path, hazard)
-    print(f"write hazard to {hazard_path}")
     agg_dir, filesystem = pyarrow_dataset.configure_output(AGG_DIR)
     partitioning = ['vs30', 'imt', 'nloc_001']
     pyarrow_aggr_dataset.append_models_to_dataset(

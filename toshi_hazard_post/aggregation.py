@@ -4,10 +4,10 @@ import itertools
 import logging
 import sys
 import time
-from concurrent.futures import ProcessPoolExecutor, as_completed
+from concurrent.futures import Executor, ProcessPoolExecutor, as_completed
 from multiprocessing import shared_memory
 from pathlib import Path
-from typing import TYPE_CHECKING, Generator
+from typing import TYPE_CHECKING, Generator, Optional
 
 import numpy as np
 import pyarrow.orc as orc
@@ -68,11 +68,13 @@ def _generate_agg_jobs(
                 yield vs30, location, imt, filepath
 
 
-def run_aggregation(args: AggregationArgs) -> None:
+def run_aggregation(args: AggregationArgs, pool_executor: Optional[Executor] = None) -> None:
     """Main entry point for running aggregation caculations.
 
     Args:
         args: the aggregation configuration
+        pool_executor: the Executor (e.g. ProcessPoolExecutor) to use for launching the parallel tasks. If
+            none given, ProcessPoolExecutor(max_workers=NUM_WORKERS) is used
     """
     time0 = time.perf_counter()
     # get the sites
@@ -134,7 +136,8 @@ def run_aggregation(args: AggregationArgs) -> None:
 
     futures = {}
     # ds1 = get_realizations_dataset()
-    with ProcessPoolExecutor(max_workers=NUM_WORKERS) as executor:
+    pool_executor = pool_executor or ProcessPoolExecutor(max_workers=NUM_WORKERS)
+    with pool_executor as executor:
         for vs30, location, imt, filepath in _generate_agg_jobs(
             sites,
             imts,
