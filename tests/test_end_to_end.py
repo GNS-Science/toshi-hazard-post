@@ -32,6 +32,8 @@ def test_end_to_end(monkeypatch, tmp_path):
     # read the aggregation back out and compare
     rlz_dir, filesystem = pyarrow_dataset.configure_output(str(tmp_path))
     dataset = ds.dataset(rlz_dir, format="parquet", filesystem=filesystem, partitioning="hive")
+    df = ds.Scanner.from_dataset(dataset).to_table().to_pandas()
+    print(df)
     probs = np.stack(ds.Scanner.from_dataset(dataset).to_table().to_pandas()['values'].values)
 
     np.testing.assert_allclose(probs, probs_expected, rtol=1e-07, atol=1e-08)
