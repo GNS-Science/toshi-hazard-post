@@ -20,7 +20,7 @@ if os.name == 'nt':
     # import pyarrow as pa
     import tzdata
     # pa.util.download_tzdata_on_windows()
-    tzdata_dir = Path(tzdata.__file__).parent
+    tzdata_dir = Path(tzdata.__file__).parent / 'zoneinfo'
     os.environ['TZDIR'] = str(tzdata_dir)
     # pa.set_timezone_db_path(tzdata_dir)
 
