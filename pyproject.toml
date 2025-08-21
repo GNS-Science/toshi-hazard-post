@@ -18,7 +18,7 @@ classifiers=[
     'Programming Language :: Python :: 3.10',
 ]
 dependencies = [
-    "pandas (>=2.0.3)",
+    "pandas (>=2.0.3, <2.3.0)",
     "click (>=8.1.8)",
     "python-dotenv (>=1.0.1)",
     "pyarrow[pandas] (>=15.0)",
