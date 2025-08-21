@@ -66,7 +66,7 @@
 ## [0.3.0] - 2023-07-24
 
 ### Added
- - Disaggregation- local and AWS
+ - Disaggregation - local and AWS
  - Gridded Hazard - local and AWS
 
 ### Changed
