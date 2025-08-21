@@ -77,7 +77,7 @@
 ## [0.2.0] - 2022-08-03
 
 ### Added
- - A working Dockerfile fpor batch
+ - A working Dockerfile for batch
  - main aggregation code ported from THS;
  - dynamodb via THS
  - runs hazard aggregration in AWS_BATCH mode
