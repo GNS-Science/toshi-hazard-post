@@ -15,6 +15,15 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+from pathlib import Path
+if os.name == 'nt':
+    # import pyarrow as pa
+    import tzdata
+    # pa.util.download_tzdata_on_windows()
+    tzdata_dir = Path(tzdata.__file__).parent
+    os.environ['TZDIR'] = str(tzdata_dir)
+    # pa.set_timezone_db_path(tzdata_dir)
+
 DEFAULT_NUM_WORKERS = 1
 DEFAULT_FS = 'LOCAL'
 
