@@ -15,6 +15,14 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+# on Windows we need to tell pyarrow where to find the installed time zone database
+# https://arrow.apache.org/docs/python/install.html#tzdata-on-windows
+if os.name == 'nt':
+    import tzdata
+
+    tzdata_dir = Path(tzdata.__file__).parent / 'zoneinfo'
+    os.environ['TZDIR'] = str(tzdata_dir)
+
 DEFAULT_NUM_WORKERS = 1
 DEFAULT_FS = 'LOCAL'
 

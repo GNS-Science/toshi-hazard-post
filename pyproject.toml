@@ -29,6 +29,7 @@ dependencies = [
     "numba (<0.61.0)",
     "toshi-hazard-store (>=1.1.0)",
     "numpy (<2)",
+    "tzdata (>=2025.2,<2026.0)",
 ]
 
 [tool.poetry]

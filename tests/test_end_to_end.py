@@ -7,6 +7,7 @@ from toshi_hazard_store.model.pyarrow import pyarrow_dataset
 
 from toshi_hazard_post.aggregation import run_aggregation
 from toshi_hazard_post.aggregation_args import load_input_args
+from concurrent.futures import ThreadPoolExecutor
 import toshi_hazard_post.data
 
 fixture_dir = resources.files('tests.fixtures.end_to_end')
@@ -22,12 +23,10 @@ def test_end_to_end(monkeypatch, tmp_path):
     monkeypatch.setattr(toshi_hazard_post.data, 'AGG_DIR', str(tmp_path))
     monkeypatch.setattr(toshi_hazard_post.data, 'RLZ_DIR', str(Path(__file__).parent / 'fixtures/end_to_end/rlz'))
 
-    # os.environ["THP_RLZ_DIR"] = str(Path(__file__).parent / 'fixtures/end_to_end/rlz')
-    # os.environ["THP_AGG_DIR"] = str(tmp_path)
-    # os.environ["THP_NUM_WORKERS"] = "1"
-
     agg_args = load_input_args(args_filepath)
-    run_aggregation(agg_args)
+    # we use threading because monkeypatching does not work on platforms where multiprocessing uses spawn
+    # instead of fork
+    run_aggregation(agg_args, ThreadPoolExecutor())
 
     # read the aggregation back out and compare
     rlz_dir, filesystem = pyarrow_dataset.configure_output(str(tmp_path))
