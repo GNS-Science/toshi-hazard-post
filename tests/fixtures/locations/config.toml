@@ -1,9 +1,0 @@
-[aggregation]
-hazard_model_id = "TEST"
-stage = "PROD"
-vs30s = [ 200 ]
-imts = ['PGA', 'SA(0.1)', 'SA(0.2)', 'SA(0.3)', 'SA(0.4)', 'SA(0.5)', 'SA(0.7)','SA(1.0)', 'SA(1.5)', 'SA(2.0)', 'SA(3.0)', 'SA(4.0)', 'SA(5.0)', 'SA(6.0)','SA(7.5)','SA(10.0)']
-aggs = ["mean", "cov", "std", "0.005", "0.01", "0.025", "0.05", "0.1", "0.2", "0.3", "0.4", "0.5", "0.6", "0.7", "0.8", "0.9", "0.95", "0.975", "0.99", "0.995"]
-locations = ["SRWG214"]
-logic_tree_file = "tests/fixtures/locations/test_logic_tree.py"
-gtids = ["R2VuZXJhbFRhc2s6MTA2NzMyOA==", "R2VuZXJhbFRhc2s6MTMwNjYz"]

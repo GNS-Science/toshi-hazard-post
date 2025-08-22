@@ -1,107 +1,97 @@
 """A collection of calculation functions for hazard aggregation."""
 
 import logging
-import math
-from typing import List, Tuple, Union
+from typing import TYPE_CHECKING, Tuple, Union
 
 import numpy as np
-import numpy.typing as npt
 from numba import jit
+
+if TYPE_CHECKING:
+    import numpy.typing as npt
 
 log = logging.getLogger(__name__)
 
 
 @jit(nopython=True)
-def prob_to_rate(prob: npt.NDArray, inv_time: float) -> npt.NDArray:
+def prob_to_rate(prob: 'npt.NDArray', inv_time: float) -> 'npt.NDArray':
     """Convert probability of exceedance to rate assuming Poisson distribution.
 
-    Parameters
-    ----------
-    prob
-        probability of exceedance
-    inv_time
-        time period for probability (e.g. 1.0 for annual probability)
+    Args:
+        prob: probability of exceedance
+        inv_time: time period for probability (e.g. 1.0 for annual probability)
 
-    Returns
-    -------
-    rate
-        return rate in inv_time
+    Returns:
+        rate: return rate in inv_time
     """
-
     return -np.log(1.0 - prob) / inv_time
 
 
 @jit(nopython=True)
-def rate_to_prob(rate: npt.NDArray, inv_time: float) -> npt.NDArray:
+def rate_to_prob(rate: 'npt.NDArray', inv_time: float) -> 'npt.NDArray':
     """Convert rate to probabiility of exceedance assuming Poisson distribution.
 
-    Parameters
-    ----------
-    rate
-        rate over inv_time
-    inv_time
-        time period of rate (e.g. 1.0 for annual rate)
+    Args:
+        rate: rate over inv_time
+        inv_time: time period of rate (e.g. 1.0 for annual rate)
 
-    Returns
-    -------
-    prob
-        probability of exceedance in inv_time
+    Returns:
+        prob: probability of exceedance in inv_time
     """
-
     return 1.0 - np.exp(-inv_time * rate)
 
 
-def weighted_avg_and_std(values: npt.NDArray, weights: npt.NDArray) -> Tuple[np.double, float]:
+def weighted_avg_and_std(values: 'npt.NDArray', weights: 'npt.NDArray') -> Tuple['npt.NDArray', 'npt.NDArray']:
     """Calculate weighted average and standard deviation of an array.
 
-    Parameters
-    ----------
-    values
-        array of values
-    weights
-        weights of values. Same length as values.
+    Args:
+        values: array of values (branch, IMTL)
+        weights: weights of values (branch, )
 
-    Returns
-    -------
-    mean
-        weighted mean
-    std
-        standard deviation
+    Returns:
+        A tuple of (mean, std) where mean is the weighted mean and
+            std is the standard devaition both with size (IMTL, ).
     """
-
-    average = np.average(values, weights=weights)
+    average = np.average(values, weights=weights, axis=0)
     # Fast and numerically precise:
-    variance = np.average((values - average) ** 2, weights=weights)
-    return (average, math.sqrt(variance))
+    variance = np.average((values - average) ** 2, weights=weights, axis=0)
+    return (average, np.sqrt(variance))
 
 
-def calculate_weighted_quantiles(
-    values: npt.NDArray, weights: npt.NDArray, quantiles: Union[List[float], npt.NDArray]
-) -> npt.NDArray:
-    """Calculate weighed quantiles of array
+def cov(mean: 'npt.NDArray', std: 'npt.NDArray') -> 'npt.NDArray':
+    """Calculate the coeficient of variation handling zero mean by setting cov to zero.
 
-    Parameters
-    ----------
-    values
-        values of data
-    weights
-        weights of values. Same length as values
-    quantiles
-        quantiles to be found. Values should be in [0,1]
+    Args:
+        mean: array of mean values
+        std: array of standard deviation values
 
-    Returns
-    -------
-    weighed_quantiles
-        weighed quantiles
+    Returns:
+        cov: array of coeficient of variation values
     """
+    cov = std / mean
+    cov[mean == 0] = 0
+    return cov
 
-    sorter = np.argsort(values)
+
+def weighted_quantiles(
+    values: 'npt.NDArray', weights: 'npt.NDArray', quantiles: Union[list[float], 'npt.NDArray']
+) -> 'npt.NDArray':
+    """Calculate weighted quantiles of array.
+
+    Args:
+        values: values of data
+        weights: weights of values. Same length as values
+        quantiles: quantiles to be found. Values should be in [0,1]
+
+    Returns:
+        weighted quantiles
+    """
+    sorter = np.argsort(values, kind='stable')
     values = values[sorter]
     weights = weights[sorter]
 
-    weighted_quantiles = np.cumsum(weights) - 0.5 * weights
-    weighted_quantiles /= np.sum(weights)
+    quantiles_at_values = np.cumsum(weights) - 0.5 * weights
+    quantiles_at_values /= np.sum(weights)
 
-    wq = np.interp(quantiles, weighted_quantiles, values)
+    wq = np.interp(quantiles, quantiles_at_values, values)
 
     return wq

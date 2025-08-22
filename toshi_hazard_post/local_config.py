@@ -1,43 +1,44 @@
-"""This module exports configuration for the current system."""
+"""Module for setting the compute configuration.
+
+Configuration parameters can be set by a file and/or environment variables. Environment variables will take
+precedence over values in the file file. The default the file location is ./.env, but can be set with THP_ENV_FILE.
+
+Args:
+    THP_NUM_WORKERS: number of parallel processes. if == 1, will run without spawning new processes.
+    THP_{RLZ|AGG}_DIR: the path to the {realization or aggregate} datastore. Can be a local filepath or s3 bucket.
+    THP_WORKING_DIR: the path to the directory to use for writing realization data tables.
+"""
 
 import os
-from pathlib import PurePath
+import tempfile
+from pathlib import Path
 
-from toshi_hazard_post.util.get_secret import get_secret
+from dotenv import load_dotenv
 
+# on Windows we need to tell pyarrow where to find the installed time zone database
+# https://arrow.apache.org/docs/python/install.html#tzdata-on-windows
+if os.name == 'nt':
+    import tzdata
 
-def boolean_env(environ_name):
-    """Allow a few ways to configure boolean viea ENV variables."""
-    return bool(os.getenv(environ_name, '').upper() in ["1", "Y", "YES", "TRUE"])
+    tzdata_dir = Path(tzdata.__file__).parent / 'zoneinfo'
+    os.environ['TZDIR'] = str(tzdata_dir)
 
-
-WORK_PATH = os.getenv('NZSHM22_SCRIPT_WORK_PATH', PurePath(os.getcwd(), "tmp"))
-
-API_URL = os.getenv('NZSHM22_TOSHI_API_URL', "http://127.0.0.1:5000/graphql")
-S3_URL = os.getenv('NZSHM22_TOSHI_S3_URL', "http://localhost:4569")
-
-# Get API key from AWS secrets manager
-try:
-    if 'TEST' in API_URL.upper():
-        API_KEY = get_secret("NZSHM22_TOSHI_API_SECRET_TEST", "us-east-1").get("NZSHM22_TOSHI_API_KEY_TEST")
-    elif 'PROD' in API_URL.upper():
-        API_KEY = get_secret("NZSHM22_TOSHI_API_SECRET_PROD", "us-east-1").get("NZSHM22_TOSHI_API_KEY_PROD")
-    else:
-        API_KEY = os.getenv('NZSHM22_TOSHI_API_KEY', "")
-except AttributeError as err:
-    print(f"unable to get secret from secretmanager: {err}")
-    API_KEY = os.getenv('NZSHM22_TOSHI_API_KEY', "")
-
-IS_OFFLINE = boolean_env('SLS_OFFLINE')  # set by serverless-wsgi plugin
-# IS_TESTING = boolean_env('TESTING', 'False')
+DEFAULT_NUM_WORKERS = 1
+DEFAULT_FS = 'LOCAL'
 
 
-DEPLOYMENT_STAGE = os.getenv('DEPLOYMENT_STAGE', 'LOCAL').upper()
-LOGGING_CFG = os.getenv('LOGGING_CFG', 'toshi_hazard_post/logging.yaml')
-CLOUDWATCH_APP_NAME = os.getenv('CLOUDWATCH_APP_NAME', 'CLOUDWATCH_APP_NAME_unconfigured')
-SNS_AGG_TASK_TOPIC = os.getenv('NZSHM22_SNS_AGG_TASK_TOPIC', 'undefined_topic')
+def _dir_path_env(name, default='', can_be_s3=False) -> str:
+    dir_path = os.getenv(name, default)
+    if can_be_s3 and dir_path[:5] == "s3://":
+        return dir_path
+    dir_path = Path(dir_path).expanduser()
+    if not dir_path.is_dir():
+        raise ValueError(f"{name} must be a directory but {dir_path} was given.")
+    return str(dir_path)
 
 
-REGION = os.getenv('REGION', 'ap-southeast-2')  # SYDNEY
-NZSHM22_HAZARD_STORE_STAGE = os.getenv('NZSHM22_HAZARD_STORE_STAGE', 'LOCAL').upper()
-NUM_WORKERS = int(os.getenv('NZSHM22_HAZARD_POST_WORKERS', 1))
+load_dotenv(os.getenv('THP_ENV_FILE', '.env'))
+NUM_WORKERS = int(os.getenv('THP_NUM_WORKERS', DEFAULT_NUM_WORKERS))
+RLZ_DIR = _dir_path_env('THP_RLZ_DIR', can_be_s3=True)
+AGG_DIR = _dir_path_env('THP_AGG_DIR', can_be_s3=True)
+WORKING_DIR = _dir_path_env('THP_WORKING_DIR', tempfile.gettempdir())

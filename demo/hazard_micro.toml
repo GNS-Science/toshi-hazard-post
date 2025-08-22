@@ -1,0 +1,31 @@
+[general]
+compatibility_key = "NZSHM22"
+hazard_model_id = "MICRO_DEMO_MODEL"
+
+[hazard_model]
+# nshm_model_version = "NSHM_v1.0.4"
+
+# alternativly, specify a path to logic tree files
+srm_logic_tree = "srm_logic_tree_micro.json"
+gmcm_logic_tree = "gmcm_logic_tree_small.json"
+
+[site_params]
+# vs30s = [400, 750]
+# locations = ["WLG", "SRWG214", "-41.000~174.700", "myfile.csv"]
+# locations = ["-34.500~173.000"]
+# locations = ["NZ"]
+# locations = ["MRO"]
+# locations = ["WLG", "DUD", "AKL", "CHC"]
+# locations = ['-40.4~175.4', '-40.3~175.4', '-40.2~175.4', '-40.1~175.4', '-40.0~175.4', "AKL"]
+# locations = ["NZ_0_1_NB_1_1"]
+
+# alternativly specify a file with locations and vs30 values
+locations_file = "sites_vs30.csv"
+
+[calculation]
+imts = ["PGA", "SA(1.0)"]
+# imts = ["PGA"]
+agg_types = ["mean", "cov", "std", "0.005", "0.01", "0.025"]
+
+[debug]
+skip_save = true

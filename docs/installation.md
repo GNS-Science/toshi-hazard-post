@@ -1,6 +1,7 @@
 # Installation
 
 ## Stable release
+This is the preferred method to install toshi-hazard-post, as it will always install the most recent stable release.
 
 To install toshi-hazard-post, run this command in your
 terminal:
@@ -9,7 +10,11 @@ terminal:
 $ pip install toshi-hazard-post
 ```
 
-This is the preferred method to install toshi-hazard-post, as it will always install the most recent stable release.
+To access realization and/or aggregation databases stored in AWS S3 cloud install with the `aws` option
+``` console
+$ pip install 'toshi-hazard-post[aws]'
+```
+
 
 If you don't have [pip][] installed, this [Python installation guide][]
 can guide you through the process.
@@ -22,13 +27,13 @@ the [Github repo][].
 You can either clone the public repository:
 
 ``` console
-$ git clone git://github.com/chrisbc/toshi-hazard-post
+$ git clone https://github.com/GNS-Science/toshi-hazard-post.git
 ```
 
 Or download the [tarball][]:
 
 ``` console
-$ curl -OJL https://github.com/chrisbc/toshi-hazard-post/tarball/master
+$ curl -OJL https://github.com/GNS-Science/toshi-hazard-post/tarball/main
 ```
 
 Once you have a copy of the source, you can install it with:

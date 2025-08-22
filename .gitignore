@@ -1,5 +1,6 @@
 #project
 SCRATCH/
+scratch/
 node_modules/
 .serverless/
 

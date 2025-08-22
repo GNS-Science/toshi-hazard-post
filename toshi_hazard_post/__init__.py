@@ -1,5 +1,6 @@
-"""Top-level package for toshi-hazard-post."""
+"""This is the top-level package for toshi_hazard_post.
 
-__author__ = """Chris B Chamberlain"""
-__email__ = 'chrisbc@artisan.co.nz'
-__version__ = '0.3.2'
+This application calculates seismic hazard from pre-calculated realizations.
+"""
+
+__version__ = '0.7.1'

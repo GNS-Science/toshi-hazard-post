@@ -1,1 +1,1 @@
-"""Unit test package for toshi-hazard-post."""
+"""The tests package."""

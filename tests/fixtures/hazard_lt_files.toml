@@ -1,0 +1,19 @@
+[general]
+compatibility_key = "NZSHM22"
+hazard_model_id = "DEMO_MODEL"
+
+[hazard_model]
+
+srm_logic_tree = "slt.json"
+gmcm_logic_tree = "glt.json"
+
+[site_params]
+vs30s = [400]
+locations = ["NZ"]
+
+# alternativly specify a file with locations and vs30 values
+# locations_file = "sites.csv"
+
+[calculation]
+imts = ["PGA", "SA(1.0)"]
+agg_types = ["mean", "cov", "std", "0.005", "0.01", "0.025"]

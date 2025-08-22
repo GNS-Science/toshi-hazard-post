@@ -1,104 +1,85 @@
-[tool]
-
-[tool.mypy]
-plugins = "numpy.typing.mypy_plugin"
-ignore_missing_imports = true
-
-[tool.poetry]
+[project]
 name = "toshi-hazard-post"
-version = "0.3.2"
-homepage = "https://github.com/chrisbc/toshi-hazard-post"
-description = "Hazard post-processing pipeline as serverless AWS infrastructure."
-authors = ["GNS Science New Zealand <chrisbc@artisan.co.nz>"]
+version = "0.7.1"
 readme = "README.md"
+description = "Hazard post-processing pipeline as serverless AWS infrastructure."
+authors = [
+    {name = "Chris DiCaprio", email = "christopher.dicaprio@gmail.com"},
+    {name = "Chris Chamberlain", email = "chrisbc@artisan.co.nz"},
+]
 license =  "AGPL-3.0"
+requires-python = ">=3.10,<3.13"
 classifiers=[
     'Development Status :: 2 - Pre-Alpha',
     'Intended Audience :: Developers',
     'License :: OSI Approved :: MIT License',
     'Natural Language :: English',
     'Programming Language :: Python :: 3',
-    'Programming Language :: Python :: 3.9',
     'Programming Language :: Python :: 3.10',
 ]
+dependencies = [
+    "pandas (>=2.0.3)",
+    "click (>=8.1.8)",
+    "python-dotenv (>=1.0.1)",
+    "pyarrow[pandas] (>=15.0)",
+    "nzshm-common (>=0.8.4)",
+    "nzshm-model (>=0.13.5)",
+    "pydantic (>=2.10.6)",
+    "tomlkit (>=0.13.2)",
+    "numba (<0.61.0)",
+    "toshi-hazard-store (>=1.1.0)",
+    "numpy (<2)",
+    "tzdata (>=2025.2,<2026.0)",
+]
 
+[tool.poetry]
 packages = [
     { include = "toshi_hazard_post" },
     { include = "tests", format = "sdist" },
+    { include = "scripts" },
 ]
 
 [tool.poetry.scripts]
-thp = 'scripts.cli:main'
+thp = 'scripts.cli:thp'
 
-[tool.poetry.dependencies]
-python = ">=3.9,<3.13"
-boto3 = "^1.24.34"
-nshm-toshi-client = "^1.0.0"
-PyYAML = "^6.0"
-toml = "^0.10.2"
-click = "^8.1.3"
-dacite = "^1.7.0"
-numba = "^0.56.0"
-toshi-hazard-store = "^0.7.5"
-pandas = "~2.0.3"
-nzshm-model = "^0.4.0"
+[tool.mypy]
+plugins = "numpy.typing.mypy_plugin"
+ignore_missing_imports = true
+
 
 [tool.poetry.group.dev.dependencies]
-black  = { version = "^22.3"}
-isort  = { version = "^5.8.0"}
-flake8  = { version = "^3.9.2"}
-flake8-docstrings = { version = "^1.6.0", optional = true }
-pytest = { version = "^6.2.4"}
-pytest-cov  = { version = "^2.12.0"}
-virtualenv  = { version = "^20.2.2", optional = true}
-mkdocs  = { version = "^1.1.2"}
-mkdocs-include-markdown-plugin  = { version = "^1.0.0"}
-mkdocs-material  = { version = "^6.1.7"}
-mkdocstrings  = { version = "^0.18.0"}
-mkdocs-material-extensions  = { version = "^1.0.1"}
-mkdocs-autorefs = {version = "^0.3.1"}
-pymdown-extensions = {version = "^9.4"}
-mkdocstrings-python = {version = "^0.6.5"}
-mkdocs-pymdownx-material-extras = "^2.0.3"
-twine  = { version = "^6.1.0"}
-pre-commit = {version = "^2.12.0", optional = true}
-toml = {version = "^0.10.2", optional = true}
-bump2version = {version = "^1.0.1"}
-jinja2 = {version = "3.0.3"}
-types-PyYAML = "^6.0.10"
-types-toml = "^0.10.8"
-types-requests = "^2.28.5"
-tox = "^4.6.4"
-mypy = "^1.8.0"
+black = "^25.1.0"
+isort = "^6.0.0"
+flake8 = "^7.1.2"
+pytest = "^8.3.4"
+pytest-cov = "^6.0.0"
+twine = "^6.1.0"
+bump2version = "^1.0.1"
+types-toml = "^0.10.8.20240310"
+types-requests = "^2.32.0.20241016"
+tox = "^4.24.1"
+mypy = "^1.15.0"
+flake8-docstrings = "^1.7.0"
+
+
+[tool.poetry.group.doc.dependencies]
+mkdocs = "^1.6.1"
+mkdocs-include-markdown-plugin = "^7.1.4"
+mkdocs-material = "^9.6.5"
+mkdocs-material-extensions = "^1.3.1"
+mkdocs-autorefs = "^1.4.0"
+mkdocs-pymdownx-material-extras = "^2.7"
+pymdown-extensions = "^10.14.3"
+mkdocstrings = "^0.28.2"
+mkdocstrings-python = "^1.16.2"
 
 [tool.poetry.extras]
-test = [
-    "pytest",
-    "black",
-    "isort",
-    "mypy",
-    "flake8",
-    "flake8-docstrings",
-    "pytest-cov"
-    ]
-
-dev = ["tox", "pre-commit", "virtualenv", "pip", "twine", "toml", "bump2version"]
-
-doc = [
-    "mkdocs",
-    "mkdocs-include-markdown-plugin",
-    "mkdocs-material",
-    "mkdocstrings",
-    "mkdocs-material-extension",
-    "mkdocs-autorefs"
-    ]
-
-
+aws = ["boto3"]
 
 [tool.black]
 line-length = 120
 skip-string-normalization = true
-target-version = ['py39', 'py310']
+target-version = ['py310', 'py311']
 include = '\.pyi?$'
 exclude = '''
 /(
@@ -129,3 +110,6 @@ skip_gitignore = true
 [build-system]
 requires = ["poetry-core>=1.0.0"]
 build-backend = "poetry.core.masonry.api"
+
+[tool.pytest.ini_options]
+addopts = "--ignore=scratch"

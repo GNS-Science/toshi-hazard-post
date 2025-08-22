@@ -1,15 +1,11 @@
 import json
 import unittest
 from pathlib import Path
-import pytest
-import numpy as np
 
-from toshi_hazard_post.calculators import (
-    prob_to_rate,
-    rate_to_prob,
-    weighted_avg_and_std,
-    calculate_weighted_quantiles,
-)
+import numpy as np
+import pytest
+
+from toshi_hazard_post.calculators import cov, prob_to_rate, rate_to_prob, weighted_avg_and_std, weighted_quantiles
 
 
 class TestProbRate(unittest.TestCase):
@@ -38,35 +34,53 @@ class TestProbRate(unittest.TestCase):
 class TestMeanStd(unittest.TestCase):
     def setUp(self):
         self._weights_values_file = Path(Path(__file__).parent, 'fixtures/calculators', 'weights_and_values.json')
-        self._mean_expected = 4.48577620473112
-        self._std_expected = 2.6294520822489
+        self._mean_expected = np.array([4.48577620473112, 4.48577620473112 * 2.0])
+        self._std_expected = np.array([2.6294520822489, 2.6294520822489 * 2.0])
 
         w_and_v = json.load(open(self._weights_values_file))
         self._weights = np.array(w_and_v['weights'])
         self._values = np.array(w_and_v['values'])
+        self._values = np.vstack((self._values, self._values * 2.0)).transpose()
 
     def test_weighted_avg_and_std(self):
-
         mean, std = weighted_avg_and_std(self._values, self._weights)
 
         assert mean == pytest.approx(self._mean_expected)
         assert std == pytest.approx(self._std_expected)
 
+    def test_zero_mean(self):
+        values = self._values * 0.0
+        mean, std = weighted_avg_and_std(values, self._weights)
+        weighted_cov = cov(mean, std)
+        assert (weighted_cov == 0).all()
+
 
 class TestQuantiles(unittest.TestCase):
     def setUp(self):
-        self._weights_values_file = Path(Path(__file__).parent, 'fixtures/calculators', 'weights_and_values.json')
-
-        w_and_v = json.load(open(self._weights_values_file))
-        self._weights = np.array(w_and_v['weights'])
-        self._values = np.array(w_and_v['values'])
+        weights_filepath = Path(__file__).parent / 'fixtures' / 'calculators' / 'weights.npy'
+        rates_filepath = Path(__file__).parent / 'fixtures' / 'calculators' / 'branch_rates.npy'
+        aggs_expected_filepath = Path(__file__).parent / 'fixtures' / 'calculators' / 'agg_0p2.npy'
+        self.weights = np.load(weights_filepath)
+        self.rates = np.load(rates_filepath)
+        self.aggs_expected = np.load(aggs_expected_filepath)
 
     def test_calculate_quantiles(self):
 
         quantiles = [0.5]
         values = np.array((1, 2, 3, 4, 5))
         weights = np.array((1, 0, 0, 1, 1))
-        weighted_quantiles = calculate_weighted_quantiles(np.array(values), np.array(weights), quantiles)
-        weighted_quantiles_expeced = [4]
+        quantiles = weighted_quantiles(np.array(values), np.array(weights), quantiles)
+        quantiles_expeced = [4]
 
-        assert np.allclose(weighted_quantiles, weighted_quantiles_expeced)
+        assert np.allclose(quantiles, quantiles_expeced)
+
+    def test_calculate_quantiles_b(self):
+
+        naggs = 1
+        _, nlevels = self.rates.shape
+        aggs = np.empty((naggs, nlevels))
+        quantiles = [0.2]
+        for i in range(nlevels):
+            aggs[:, i] = weighted_quantiles(self.rates[:, i], self.weights, quantiles)
+
+        np.testing.assert_allclose(aggs, self.aggs_expected, verbose=True)
