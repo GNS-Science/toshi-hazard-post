@@ -5,6 +5,9 @@
  - Optional argument for realization dataset location to override environment variable.
  - Optional argument for parallel Executor to run_aggrigation function.
 
+### Fixed
+ - time zone database on Windows needed for pyarrow.
+
 ## [0.7.0] - 2025-07-28
 
 ### Changed
