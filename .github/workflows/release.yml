@@ -1,6 +1,6 @@
 # A workflow that is scheduled to run regularly in order to check that python-run-tests.yml works
 
-name: python-release test workflow
+name: Release workflow
 
 on:
   # Allows you to run this workflow manually from the Actions tab
