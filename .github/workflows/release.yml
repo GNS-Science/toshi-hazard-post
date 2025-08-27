@@ -12,8 +12,14 @@ on:
       - 'v*'
 
 jobs:
-  call-test-workflow:
+  release-and-distribute:
     uses:  GNS-Science/nshm-github-actions/.github/workflows/python-release.yml@17-python-release
+    with:
+      python-version:  '3.12'
+    secrets: inherit
+
+  deploy-docs:
+    uses:  GNS-Science/nshm-github-actions/.github/workflows/python-deploy-docs.yml@17-python-release
     with:
       python-version:  '3.12'
     secrets: inherit
