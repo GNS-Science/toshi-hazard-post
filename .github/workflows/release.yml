@@ -1,4 +1,4 @@
-# A workflow that is scheduled to run regularly in order to check that python-run-tests.yml works
+# Publish package and documentation if tagged with 'v*'
 
 name: Release workflow
 
