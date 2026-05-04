@@ -29,7 +29,7 @@ dependencies = [
     "numba>=0.60.0,<0.66",
     "toshi-hazard-store>=1.1.0",
     "numpy<2",
-    "tzdata>=2025.2,<2026.0",
+    "tzdata>=2025.2,<2027.0",
 ]
 
 [project.optional-dependencies]
