@@ -28,7 +28,7 @@ dependencies = [
     "tomlkit>=0.13.2",
     "numba>=0.60.0,<0.66",
     "toshi-hazard-store>=1.1.0",
-    "numpy<2",
+    "numpy>=2,<3",
     "tzdata>=2025.2,<2027.0",
 ]
 
