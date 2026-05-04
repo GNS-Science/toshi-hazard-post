@@ -26,7 +26,7 @@ dependencies = [
     "nzshm-model>=0.13.5",
     "pydantic>=2.10.6",
     "tomlkit>=0.13.2",
-    "numba<0.61.0",
+    "numba>=0.60.0,<0.66",
     "toshi-hazard-store>=1.1.0",
     "numpy<2",
     "tzdata>=2025.2,<2026.0",
@@ -65,7 +65,7 @@ doc = [
 
 [tool.uv]
 exclude-newer = "1 week"
-exclude-newer-package = { "nzshm-common" = false, "nzshm-model" = false }
+exclude-newer-package = { "nzshm-common" = false, "nzshm-model" = false, "toshi-hazard-store" = false }
 
 [tool.hatch.build.targets.wheel]
 packages = ["toshi_hazard_post", "scripts"]
