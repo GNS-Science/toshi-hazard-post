@@ -3,7 +3,7 @@
 import logging
 import time
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 import pyarrow as pa
 import pyarrow.compute as pc
@@ -156,7 +156,7 @@ def save_aggregations(
 
 
 def get_realizations_dataset(
-    vs30: Optional[int] = None, nloc_0: Optional[str] = None, rlz_dir: Optional[str | Path] = None
+    vs30: int | None = None, nloc_0: str | None = None, rlz_dir: str | Path | None = None
 ) -> ds.Dataset:
     """Get a pyarrow Dataset for realizations.
 

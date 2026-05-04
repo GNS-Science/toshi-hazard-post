@@ -4,7 +4,7 @@ import copy
 import logging
 import math
 from itertools import chain, product
-from typing import TYPE_CHECKING, Tuple
+from typing import TYPE_CHECKING
 
 import numpy as np
 import nzshm_model.branch_registry
@@ -24,7 +24,7 @@ class HazardComponentBranch:
     The HazardComposite branch is the smallest unit necessary to create a hazard curve realization.
     """
 
-    def __init__(self, source_branch: 'SourceBranch', gmcm_branches: Tuple['GMCMBranch']):
+    def __init__(self, source_branch: 'SourceBranch', gmcm_branches: tuple['GMCMBranch']):
         """Initialize a new HazardComponentBranch object.
 
         Args:

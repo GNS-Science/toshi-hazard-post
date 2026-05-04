@@ -1,11 +1,13 @@
-from toshi_hazard_post.data import get_batch_table, get_job_datatable, get_realizations_dataset
+import importlib.resources as resources
+from pathlib import Path
+
 import pytest
+from nzshm_common.location import get_locations
+
 import toshi_hazard_post.data
 from toshi_hazard_post.aggregation_setup import get_logic_trees
+from toshi_hazard_post.data import get_batch_table, get_job_datatable, get_realizations_dataset
 from toshi_hazard_post.logic_tree import HazardLogicTree
-from nzshm_common.location import get_locations
-from pathlib import Path
-import importlib.resources as resources
 
 compatibility_key = "NZSHM22"
 fixture_dir = resources.files('tests.fixtures.end_to_end')

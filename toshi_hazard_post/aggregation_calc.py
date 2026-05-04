@@ -3,10 +3,11 @@
 import logging
 import os
 import time
+from collections.abc import Sequence
 from dataclasses import dataclass
 from multiprocessing import shared_memory
 from pathlib import Path
-from typing import TYPE_CHECKING, Dict, Sequence
+from typing import TYPE_CHECKING
 
 import numpy as np
 import pyarrow.orc as orc
@@ -151,7 +152,7 @@ def calculate_aggs(branch_rates: 'npt.NDArray', weights: 'npt.NDArray', agg_type
 
 
 def calc_composite_rates(
-    branch_hashes: list[str], component_rates: Dict[str, 'npt.NDArray'], nlevels: int
+    branch_hashes: list[str], component_rates: dict[str, 'npt.NDArray'], nlevels: int
 ) -> 'npt.NDArray':
     """Calculate the rate for a single composite branch of the logic tree.
 
@@ -190,7 +191,7 @@ def calc_composite_rates(
     # return rates.sum(axis=0)
 
 
-def build_branch_rates(branch_hash_table: 'npt.NDArray', component_rates: Dict[str, 'npt.NDArray']) -> 'npt.NDArray':
+def build_branch_rates(branch_hash_table: 'npt.NDArray', component_rates: dict[str, 'npt.NDArray']) -> 'npt.NDArray':
     """Calculate the rate for the composite branches in the logic tree.
 
     Args:
@@ -204,7 +205,7 @@ def build_branch_rates(branch_hash_table: 'npt.NDArray', component_rates: Dict[s
     return np.array([calc_composite_rates(branch, component_rates, nimtl) for branch in branch_hash_table])
 
 
-def create_component_dict(component_rates: 'pd.DataFrame') -> Dict[str, 'npt.NDArray']:
+def create_component_dict(component_rates: 'pd.DataFrame') -> dict[str, 'npt.NDArray']:
     """Convert component branch rates DataFrame to dict.
 
     The 'digest' is constructed by concatenating sources digest and gmms digest. The source and gmm digests
@@ -242,45 +243,45 @@ def calc_aggregation(task_args: AggTaskArgs, shared_args: AggSharedArgs) -> None
     hazard_model_id = shared_args.hazard_model_id
 
     branch_hash_table_shm = shared_memory.SharedMemory(name=constants.BRANCH_HASH_TABLE_SHM_NAME)
-    branch_hash_table: 'npt.NDArray' = np.ndarray(
+    branch_hash_table: npt.NDArray = np.ndarray(
         shared_args.branch_hash_table_shape, dtype='<U24', buffer=branch_hash_table_shm.buf
     )
 
     weights_shm = shared_memory.SharedMemory(name=constants.WEIGHTS_SHM_NAME)
-    weights: 'npt.NDArray' = np.ndarray(shared_args.weights_shape, dtype=np.float64, buffer=weights_shm.buf)
+    weights: npt.NDArray = np.ndarray(shared_args.weights_shape, dtype=np.float64, buffer=weights_shm.buf)
 
-    log.info("worker %s: loading realizations from %s. . ." % (worker_name, task_args.table_filepath))
+    log.info(f"worker {worker_name}: loading realizations from {task_args.table_filepath}. . .")
     component_probs = load_realizations(task_args.table_filepath)
-    log.debug("worker %s: %s rlz_table " % (worker_name, component_probs.shape))
+    log.debug(f"worker {worker_name}: {component_probs.shape} rlz_table ")
 
     # convert probabilities to rates
     time1 = time.perf_counter()
     component_rates = convert_probs_to_rates(component_probs)
     del component_probs
     time2 = time.perf_counter()
-    log.debug('worker %s: time to convert_probs_to_rates() % 0.2f' % (worker_name, time2 - time1))
+    log.debug(f'worker {worker_name}: time to convert_probs_to_rates() {time2 - time1: 0.2f}')
 
     component_rates = create_component_dict(component_rates)
 
     time3 = time.perf_counter()
-    log.debug('worker %s: time to convert to dict and set digest index %0.2f seconds' % (worker_name, time3 - time2))
-    log.debug('worker %s: rates_table %d' % (worker_name, len(component_rates)))
+    log.debug(f'worker {worker_name}: time to convert to dict and set digest index {time3 - time2:0.2f} seconds')
+    log.debug('worker %s: rates_table %d', worker_name, len(component_rates))
 
     composite_rates = build_branch_rates(branch_hash_table, component_rates)
     time4 = time.perf_counter()
-    log.debug('worker %s: time to build_ranch_rates %0.2f seconds' % (worker_name, time4 - time3))
+    log.debug(f'worker {worker_name}: time to build_ranch_rates {time4 - time3:0.2f} seconds')
 
-    log.info("worker %s:  calculating aggregates . . . " % worker_name)
+    log.info(f"worker {worker_name}:  calculating aggregates . . . ")
     hazard = calculate_aggs(composite_rates, weights, agg_types)
     time5 = time.perf_counter()
-    log.debug('worker %s: time to calculate aggs %0.2f seconds' % (worker_name, time5 - time4))
+    log.debug(f'worker {worker_name}: time to calculate aggs {time5 - time4:0.2f} seconds')
 
     probs = calculators.rate_to_prob(hazard, 1.0)
     if shared_args.skip_save:
-        log.info("worker %s SKIPPING SAVE . . . " % worker_name)
+        log.info(f"worker {worker_name} SKIPPING SAVE . . . ")
     else:
-        log.info("worker %s saving result . . . " % worker_name)
+        log.info(f"worker {worker_name} saving result . . . ")
         save_aggregations(probs, location, vs30, imt, agg_types, hazard_model_id, compatibility_key)
     task_args.table_filepath.unlink()
     time6 = time.perf_counter()
-    log.info('worker %s time to perform one aggregation %0.2f seconds' % (worker_name, time6 - time0))
+    log.info(f'worker {worker_name} time to perform one aggregation {time6 - time0:0.2f} seconds')

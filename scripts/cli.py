@@ -1,11 +1,9 @@
 import logging
-import os
 
 import click
 
 from toshi_hazard_post.aggregation import run_aggregation
 from toshi_hazard_post.aggregation_args import load_input_args
-import toshi_hazard_store
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logging.getLogger('toshi_hazard_post').setLevel(logging.INFO)

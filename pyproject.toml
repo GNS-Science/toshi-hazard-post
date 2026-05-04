@@ -18,98 +18,80 @@ classifiers=[
     'Programming Language :: Python :: 3.10',
 ]
 dependencies = [
-    "pandas (>=2.0.3)",
-    "click (>=8.1.8)",
-    "python-dotenv (>=1.0.1)",
-    "pyarrow[pandas] (>=15.0)",
-    "nzshm-common (>=0.8.4)",
-    "nzshm-model (>=0.13.5)",
-    "pydantic (>=2.10.6)",
-    "tomlkit (>=0.13.2)",
-    "numba (<0.61.0)",
-    "toshi-hazard-store (>=1.1.0)",
-    "numpy (<2)",
-    "tzdata (>=2025.2,<2026.0)",
+    "pandas>=2.0.3",
+    "click>=8.1.8",
+    "python-dotenv>=1.0.1",
+    "pyarrow>=15.0,<21",
+    "nzshm-common>=0.8.4",
+    "nzshm-model>=0.13.5",
+    "pydantic>=2.10.6",
+    "tomlkit>=0.13.2",
+    "numba<0.61.0",
+    "toshi-hazard-store>=1.1.0",
+    "numpy<2",
+    "tzdata>=2025.2,<2026.0",
 ]
 
-[tool.poetry]
-packages = [
-    { include = "toshi_hazard_post" },
-    { include = "tests", format = "sdist" },
-    { include = "scripts" },
+[project.optional-dependencies]
+aws = ["boto3"]
+
+[project.scripts]
+thp = "scripts.cli:thp"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3.4,<9.0.0",
+    "pytest-cov>=6.0.0,<7.0.0",
+    "twine>=6.1.0,<7.0.0",
+    "bump2version>=1.0.1,<2.0.0",
+    "types-toml>=0.10.8.20240310,<0.11.0.0",
+    "types-requests>=2.32.0.20241016,<3.0.0.0",
+    "tox>=4.24.1,<5.0.0",
+    "tox-uv>=1.20.0",
+    "mypy>=1.15.0,<2.0.0",
+    "ruff>=0.6.0",
+]
+doc = [
+    "mkdocs>=1.6.1,<2.0.0",
+    "mkdocs-include-markdown-plugin>=7.1.4,<8.0.0",
+    "mkdocs-material>=9.6.5,<10.0.0",
+    "mkdocs-material-extensions>=1.3.1,<2.0.0",
+    "mkdocs-autorefs>=1.4.0,<2.0.0",
+    "mkdocs-pymdownx-material-extras>=2.7,<3.0",
+    "pymdown-extensions>=10.14.3,<11.0.0",
+    "mkdocstrings>=0.28.2,<0.29.0",
+    "mkdocstrings-python>=1.16.2,<2.0.0",
 ]
 
-[tool.poetry.scripts]
-thp = 'scripts.cli:thp'
+[tool.uv]
+exclude-newer = "1 week"
+exclude-newer-package = { "nzshm-common" = false, "nzshm-model" = false }
+
+[tool.hatch.build.targets.wheel]
+packages = ["toshi_hazard_post", "scripts"]
+
+[tool.hatch.build.targets.sdist]
+include = ["toshi_hazard_post", "scripts", "tests"]
 
 [tool.mypy]
 plugins = "numpy.typing.mypy_plugin"
 ignore_missing_imports = true
 
-
-[tool.poetry.group.dev.dependencies]
-black = "^25.1.0"
-isort = "^6.0.0"
-flake8 = "^7.1.2"
-pytest = "^8.3.4"
-pytest-cov = "^6.0.0"
-twine = "^6.1.0"
-bump2version = "^1.0.1"
-types-toml = "^0.10.8.20240310"
-types-requests = "^2.32.0.20241016"
-tox = "^4.24.1"
-mypy = "^1.15.0"
-flake8-docstrings = "^1.7.0"
-
-
-[tool.poetry.group.doc.dependencies]
-mkdocs = "^1.6.1"
-mkdocs-include-markdown-plugin = "^7.1.4"
-mkdocs-material = "^9.6.5"
-mkdocs-material-extensions = "^1.3.1"
-mkdocs-autorefs = "^1.4.0"
-mkdocs-pymdownx-material-extras = "^2.7"
-pymdown-extensions = "^10.14.3"
-mkdocstrings = "^0.28.2"
-mkdocstrings-python = "^1.16.2"
-
-[tool.poetry.extras]
-aws = ["boto3"]
-
-[tool.black]
+[tool.ruff]
 line-length = 120
-skip-string-normalization = true
-target-version = ['py310', 'py311']
-include = '\.pyi?$'
-exclude = '''
-/(
-    \.eggs
-  | \.git
-  | \.hg
-  | \.mypy_cache
-  | \.tox
-  | \.venv
-  | _build
-  | buck-out
-  | build
-  | dist
-)/
-'''
 
-[tool.isort]
-multi_line_output = 3
-include_trailing_comma = true
-force_grid_wrap = 0
-use_parentheses = true
-ensure_newline_before_comments = true
-line_length = 120
-skip_gitignore = true
-# you can skip files as below
-#skip_glob = docs/conf.py
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]
+
+[tool.ruff.format]
+quote-style = "preserve"
 
 [build-system]
-requires = ["poetry-core>=1.0.0"]
-build-backend = "poetry.core.masonry.api"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
 [tool.pytest.ini_options]
 addopts = "--ignore=scratch"
