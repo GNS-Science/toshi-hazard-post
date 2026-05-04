@@ -60,7 +60,7 @@ doc = [
     "mkdocs-pymdownx-material-extras>=2.7,<3.0",
     "pymdown-extensions>=10.14.3,<11.0.0",
     "mkdocstrings>=1.0.4",
-    "mkdocstrings-python>=1.16.2,<2.0.0",
+    "mkdocstrings-python>=2.0.3",
 ]
 
 [tool.uv]
