@@ -74,7 +74,6 @@ packages = ["toshi_hazard_post", "scripts"]
 include = ["toshi_hazard_post", "scripts", "tests"]
 
 [tool.mypy]
-plugins = "numpy.typing.mypy_plugin"
 ignore_missing_imports = true
 
 [tool.ruff]

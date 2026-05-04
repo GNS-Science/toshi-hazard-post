@@ -49,9 +49,9 @@ def get_batch_table(
     columns = ['nloc_001', 'imt', 'sources_digest', 'gmms_digest', 'values']
     flt = (
         (pc.field('compatible_calc_id') == pc.scalar(compatibility_key))
-        & (pc.is_in(pc.field('sources_digest'), pa.array(sources_digests)))
-        & (pc.is_in(pc.field('gmms_digest'), pa.array(gmms_digests)))
-        & (pc.is_in(pc.field('imt'), pa.array(imts)))
+        & (pc.is_in(pc.field('sources_digest'), pa.array(sources_digests)))  # type: ignore[attr-defined]
+        & (pc.is_in(pc.field('gmms_digest'), pa.array(gmms_digests)))  # type: ignore[attr-defined]
+        & (pc.is_in(pc.field('imt'), pa.array(imts)))  # type: ignore[attr-defined]
     )
 
     # if we used the partitioning when fetching the dataset then vs30 and nloc_0 will not be in the
