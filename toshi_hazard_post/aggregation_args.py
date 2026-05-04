@@ -8,17 +8,17 @@ Members:
 import csv
 from collections import namedtuple
 from pathlib import Path
-from typing import Any, Optional, Union
+from typing import Annotated, Any
 
 import tomlkit
 from nzshm_model import all_model_versions
 from pydantic import AfterValidator, BaseModel, FilePath, PositiveInt, ValidationInfo, field_validator, model_validator
 from toshi_hazard_store.model.constraints import AggregationEnum, IntensityMeasureTypeEnum
 from toshi_hazard_store.scripts.ths_import import chc_manager
-from typing_extensions import Annotated, Self
+from typing_extensions import Self
 
 
-def load_input_args(filepath: Union[str, Path]) -> 'AggregationArgs':
+def load_input_args(filepath: str | Path) -> 'AggregationArgs':
     """Load the input arguments of a hazard aggregation calculation.
 
     Args:
@@ -32,7 +32,7 @@ def load_input_args(filepath: Union[str, Path]) -> 'AggregationArgs':
     return AggregationArgs(**config)
 
 
-def _resolve_path(path: Union[Path, str], reference_filepath: Union[Path, str]) -> str:
+def _resolve_path(path: Path | str, reference_filepath: Path | str) -> str:
     path = Path(path)
     if not path.is_absolute():
         return str(Path(reference_filepath).parent / path)
@@ -41,7 +41,7 @@ def _resolve_path(path: Union[Path, str], reference_filepath: Union[Path, str]) 
 
 def _is_model_version(value: str) -> str:
     if value not in all_model_versions():
-        raise ValueError("must specify valid nshm_model_version ({})".format(all_model_versions()))
+        raise ValueError(f"must specify valid nshm_model_version ({all_model_versions()})")
     return value
 
 
@@ -49,7 +49,7 @@ def _is_compat_calc_id(compat_calc_id: str) -> str:
     try:
         chc_manager.load(compat_calc_id)
     except FileNotFoundError:
-        raise ValueError("Compatible Hazard Calculation with unique ID {value} does not exist.")
+        raise ValueError("Compatible Hazard Calculation with unique ID {value} does not exist.") from None
 
     return compat_calc_id
 
@@ -78,9 +78,9 @@ class HazardModelArgs(BaseModel):
 
     """
 
-    nshm_model_version: Annotated[Optional[str], AfterValidator(_is_model_version)] = None
-    srm_logic_tree: Optional[FilePath] = None
-    gmcm_logic_tree: Optional[FilePath] = None
+    nshm_model_version: Annotated[str | None, AfterValidator(_is_model_version)] = None
+    srm_logic_tree: FilePath | None = None
+    gmcm_logic_tree: FilePath | None = None
 
     @model_validator(mode='after')
     def _check_logic_trees(self) -> Self:
@@ -106,9 +106,9 @@ class SiteArgs(BaseModel):
         locations_file:
     """
 
-    vs30s: Optional[list[PositiveInt]] = None
-    locations: Optional[list[str]] = None
-    locations_file: Optional[FilePath] = None
+    vs30s: list[PositiveInt] | None = None
+    locations: list[str] | None = None
+    locations_file: FilePath | None = None
 
     @staticmethod
     def _has_vs30(filepath: Path):
@@ -128,10 +128,10 @@ class SiteArgs(BaseModel):
                 for row in site_reader:
                     site = Site(*row)
                     try:
-                        vs30 = int(site.vs30)  # type:ignore
+                        vs30 = int(site.vs30)
                         assert vs30 > 0
                     except ValueError:
-                        raise ValueError("not all vs30 values are valid {}".format(row))
+                        raise ValueError(f"not all vs30 values are valid {row}") from None
         return value
 
     @model_validator(mode='after')
@@ -173,7 +173,7 @@ class DebugArgs(BaseModel):
     """
 
     skip_save: bool = False
-    restart: Optional[tuple[FilePath, FilePath]] = None
+    restart: tuple[FilePath, FilePath] | None = None
 
 
 class AggregationArgs(BaseModel):

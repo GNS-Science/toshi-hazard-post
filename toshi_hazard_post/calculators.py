@@ -1,7 +1,7 @@
 """A collection of calculation functions for hazard aggregation."""
 
 import logging
-from typing import TYPE_CHECKING, Tuple, Union
+from typing import TYPE_CHECKING, Union
 
 import numpy as np
 from numba import jit
@@ -40,7 +40,7 @@ def rate_to_prob(rate: 'npt.NDArray', inv_time: float) -> 'npt.NDArray':
     return 1.0 - np.exp(-inv_time * rate)
 
 
-def weighted_avg_and_std(values: 'npt.NDArray', weights: 'npt.NDArray') -> Tuple['npt.NDArray', 'npt.NDArray']:
+def weighted_avg_and_std(values: 'npt.NDArray', weights: 'npt.NDArray') -> tuple['npt.NDArray', 'npt.NDArray']:
     """Calculate weighted average and standard deviation of an array.
 
     Args:

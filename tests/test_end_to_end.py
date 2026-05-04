@@ -1,14 +1,14 @@
 import importlib.resources as resources
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import numpy as np
 import pyarrow.dataset as ds
 from toshi_hazard_store.model.pyarrow import pyarrow_dataset
 
+import toshi_hazard_post.data
 from toshi_hazard_post.aggregation import run_aggregation
 from toshi_hazard_post.aggregation_args import load_input_args
-from concurrent.futures import ThreadPoolExecutor
-import toshi_hazard_post.data
 
 fixture_dir = resources.files('tests.fixtures.end_to_end')
 args_filepath = fixture_dir / 'hazard.toml'

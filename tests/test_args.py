@@ -3,7 +3,6 @@ from pathlib import Path
 
 import pytest
 import tomlkit
-
 from toshi_hazard_store.model.constraints import AggregationEnum, IntensityMeasureTypeEnum
 
 from toshi_hazard_post.aggregation_args import AggregationArgs
