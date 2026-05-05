@@ -48,7 +48,7 @@ def _generate_agg_jobs(
     # group locations by vs30
     vs30s_unique = set([site.vs30 for site in sites])
 
-    log.info(f"creating batches from {len(sites)} sites and {len(vs30s_unique)} vs30s")
+    log.info("creating batches from %d sites and %d vs30s", len(sites), len(vs30s_unique))
     for vs30 in vs30s_unique:
         locations = [site.location for site in sites if site.vs30 == vs30]
         location_bins = bin_locations(locations, PARTITION_RESOLUTION)
@@ -61,7 +61,7 @@ def _generate_agg_jobs(
             for location, imt in itertools.product(location_bin.locations, imts):
                 job_datatable = get_job_datatable(batch_datatable, location, imt, n_expected)
                 filepath = Path(WORKING_DIR) / f"{vs30}_{nloc_0}_{location.downsample(0.001).code}_{imt}_dataset.dat"
-                log.debug(f"writing file {filepath} for agg job {location.code}, {imt}")
+                log.debug("writing file %s for agg job %s, %s", filepath, location.code, imt)
                 t0 = time.perf_counter()
                 orc.write_table(job_datatable, filepath, compression='snappy')
                 t1 = time.perf_counter()
@@ -100,8 +100,8 @@ def run_aggregation(args: AggregationArgs, pool_executor: Executor | None = None
         toc = time.perf_counter()
 
         log.info('time to build weight array and hash table %0.2f seconds' % (toc - tic))
-        log.info(f"Size of weight array: {weights.nbytes >> 20}MB")
-        log.info(f"Size of hash table: {sys.getsizeof(branch_hash_table) >> 20}MB")
+        log.info("Size of weight array: %dMB", weights.nbytes >> 20)
+        log.info("Size of hash table: %dMB", sys.getsizeof(branch_hash_table) >> 20)
     else:
         branch_hash_table = np.load(args.debug.restart[0])
         weights = np.load(args.debug.restart[1])
@@ -160,7 +160,7 @@ def run_aggregation(args: AggregationArgs, pool_executor: Executor | None = None
         for future in as_completed(futures.keys()):
             if exception := future.exception():
                 num_failed += 1
-                log.error(f"Exception encountered for task args {futures[future]}: {repr(exception)}")
+                log.error("Exception encountered for task args %s: %r", futures[future], exception)
 
     time_parallel_end = time.perf_counter()
     branch_hash_table_shm.close()

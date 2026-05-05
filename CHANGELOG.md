@@ -2,11 +2,8 @@
 
 ## [Unreleased]
 ### Changed
-- deps: patch (none)
-- deps: minor — toshi-hazard-store 1.3.1→1.5.0 (skipped, incompatible with pandas 3.x)
-- deps: minor upgrades — numba 0.60→0.65.1, llvmlite 0.43→0.47 (transitive)
-- deps: major upgrades — pytest 8→9 (CVE-2025-71176), pytest-cov 6→7, tzdata 2025.3→2026.2, numpy 1.26→2.4.4, pyarrow 20→24, mkdocstrings 0.28→1.0.4, mkdocstrings-python 1.16→2.0.3
-- deps: skipped pandas 2.3.3→3.0.2 (breaking API change in to_pandas() column handling, KeyError 'values')
+- Migrated to uv and ruff
+- Upgraded dependencies
 
 ## [0.7.1] - 2025-08-18
 ### Added

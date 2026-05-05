@@ -80,7 +80,7 @@ ignore_missing_imports = true
 line-length = 120
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "B", "UP"]
+select = ["E", "F", "I", "B", "UP", "G004"]
 
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401"]
