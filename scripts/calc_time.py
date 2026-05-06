@@ -1,5 +1,6 @@
-from pathlib import Path
 import sys
+from pathlib import Path
+
 
 def main(log_filepath):
     log_filepath = Path(log_filepath)
@@ -23,11 +24,12 @@ def main(log_filepath):
     print(f"Number of workers: {nproc}")
     print(f"Total number of partitions used: {len(times_batchtable)}")
     print(f"Total number of aggregate calculations: {len(times_calc)}")
-    print(f"Mean Partition Table Creation Time: {sum(times_batchtable)/len(times_batchtable):.02f} seconds")
-    print(f"Mean Job Table Creation Time: {sum(times_jobtable)/len(times_jobtable):.02f} seconds")
-    print(f"Mean Agg Calc Time: {sum(times_calc)/len(times_calc):.02f} seconds")
+    print(f"Mean Partition Table Creation Time: {sum(times_batchtable) / len(times_batchtable):.02f} seconds")
+    print(f"Mean Job Table Creation Time: {sum(times_jobtable) / len(times_jobtable):.02f} seconds")
+    print(f"Mean Agg Calc Time: {sum(times_calc) / len(times_calc):.02f} seconds")
     print(f"Total Time: {total_time} seconds")
-    print(f"Mean time per calculation (including I/O): {nproc * total_time/len(times_calc):.02f} CPU seconds")
+    print(f"Mean time per calculation (including I/O): {nproc * total_time / len(times_calc):.02f} CPU seconds")
+
 
 if __name__ == "__main__":
     filepath = sys.argv[1]

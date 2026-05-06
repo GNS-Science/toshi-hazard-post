@@ -1,5 +1,10 @@
 # Changelog
 
+## [Unreleased]
+### Changed
+- Migrated to uv and ruff
+- Upgraded dependencies
+
 ## [0.7.1] - 2025-08-18
 ### Added
  - Optional argument for realization dataset location to override environment variable.

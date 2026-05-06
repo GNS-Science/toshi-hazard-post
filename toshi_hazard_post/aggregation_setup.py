@@ -2,10 +2,10 @@
 
 import csv
 from collections import namedtuple
+from collections.abc import Generator, Iterable
 from dataclasses import dataclass
 from itertools import product
 from pathlib import Path
-from typing import Generator, Iterable, Optional, Union
 
 from nzshm_common.location.coded_location import CodedLocation
 from nzshm_common.location.location import get_locations
@@ -30,7 +30,7 @@ class Site:
         return f"{self.location.lat}, {self.location.lon}, vs30={self.vs30}"
 
 
-def _get_vs30s(site_filepath: Union[str, Path]) -> Generator[int, None, None]:
+def _get_vs30s(site_filepath: str | Path) -> Generator[int, None, None]:
     with Path(site_filepath).open() as site_file:
         reader = csv.reader(site_file)
         SiteCSV = namedtuple("SiteCSV", next(reader), rename=True)  # type:ignore
@@ -40,9 +40,9 @@ def _get_vs30s(site_filepath: Union[str, Path]) -> Generator[int, None, None]:
 
 
 def get_logic_trees(
-    nshm_model_version: Optional[str] = None,
-    srm_logic_tree_filepath: Optional[Union[str, Path]] = None,
-    gmcm_logic_tree_filepath: Optional[Union[str, Path]] = None,
+    nshm_model_version: str | None = None,
+    srm_logic_tree_filepath: str | Path | None = None,
+    gmcm_logic_tree_filepath: str | Path | None = None,
 ) -> tuple[SourceLogicTree, GMCMLogicTree]:
     """Get a source and ground motion logic tree given a NZ NSHM model version.
 
@@ -73,9 +73,9 @@ def get_logic_trees(
 
 
 def get_sites(
-    locations_file: Optional[Path] = None,
-    locations: Optional[Iterable[str]] = None,
-    vs30s: Optional[Iterable[int]] = None,
+    locations_file: Path | None = None,
+    locations: Iterable[str] | None = None,
+    vs30s: Iterable[int] | None = None,
 ) -> list[Site]:
     """Get the sites (combined location and vs30) at which to calculate hazard.
 
@@ -104,7 +104,7 @@ def get_sites(
     if locations:
         coded_locations = get_locations(locations, resolution=0.001)
     elif locations_file:
-        coded_locations = get_locations([locations_file], resolution=0.001)
+        coded_locations = get_locations([str(locations_file)], resolution=0.001)
 
     if vs30s:
         sites = [Site(location, vs30) for location, vs30 in product(coded_locations, vs30s)]

@@ -4,10 +4,11 @@ import itertools
 import logging
 import sys
 import time
+from collections.abc import Generator
 from concurrent.futures import Executor, ProcessPoolExecutor, as_completed
 from multiprocessing import shared_memory
 from pathlib import Path
-from typing import TYPE_CHECKING, Generator, Optional
+from typing import TYPE_CHECKING
 
 import numpy as np
 import pyarrow.orc as orc
@@ -47,20 +48,20 @@ def _generate_agg_jobs(
     # group locations by vs30
     vs30s_unique = set([site.vs30 for site in sites])
 
-    log.info("creating batches from %s sites and %s vs30s" % (len(sites), len(vs30s_unique)))
+    log.info("creating batches from %d sites and %d vs30s", len(sites), len(vs30s_unique))
     for vs30 in vs30s_unique:
         locations = [site.location for site in sites if site.vs30 == vs30]
         location_bins = bin_locations(locations, PARTITION_RESOLUTION)
         for nloc_0, location_bin in location_bins.items():
             dataset = get_realizations_dataset(vs30, nloc_0)
-            log.info("batch %d, %s" % (vs30, nloc_0))
+            log.info("batch %d, %s", vs30, nloc_0)
             batch_datatable = get_batch_table(
                 dataset, compatibility_key, sources_digests, gmms_digests, vs30, nloc_0, imts
             )
             for location, imt in itertools.product(location_bin.locations, imts):
                 job_datatable = get_job_datatable(batch_datatable, location, imt, n_expected)
                 filepath = Path(WORKING_DIR) / f"{vs30}_{nloc_0}_{location.downsample(0.001).code}_{imt}_dataset.dat"
-                log.debug("writing file %s for agg job %s, %s" % (filepath, location.code, imt))
+                log.debug("writing file %s for agg job %s, %s", filepath, location.code, imt)
                 t0 = time.perf_counter()
                 orc.write_table(job_datatable, filepath, compression='snappy')
                 t1 = time.perf_counter()
@@ -68,7 +69,7 @@ def _generate_agg_jobs(
                 yield vs30, location, imt, filepath
 
 
-def run_aggregation(args: AggregationArgs, pool_executor: Optional[Executor] = None) -> None:
+def run_aggregation(args: AggregationArgs, pool_executor: Executor | None = None) -> None:
     """Main entry point for running aggregation caculations.
 
     Args:
@@ -95,12 +96,12 @@ def run_aggregation(args: AggregationArgs, pool_executor: Optional[Executor] = N
         log.info("calculating weights and branch hash table . . . ")
         tic = time.perf_counter()
         weights = logic_tree.weights
-        branch_hash_table: list | 'npt.NDArray' = logic_tree.branch_hash_table
+        branch_hash_table: list | npt.NDArray = logic_tree.branch_hash_table
         toc = time.perf_counter()
 
         log.info('time to build weight array and hash table %0.2f seconds' % (toc - tic))
-        log.info("Size of weight array: {}MB".format(weights.nbytes >> 20))
-        log.info("Size of hash table: {}MB".format(sys.getsizeof(branch_hash_table) >> 20))
+        log.info("Size of weight array: %dMB", weights.nbytes >> 20)
+        log.info("Size of hash table: %dMB", sys.getsizeof(branch_hash_table) >> 20)
     else:
         branch_hash_table = np.load(args.debug.restart[0])
         weights = np.load(args.debug.restart[1])
@@ -114,11 +115,11 @@ def run_aggregation(args: AggregationArgs, pool_executor: Optional[Executor] = N
         name=constants.BRANCH_HASH_TABLE_SHM_NAME, create=True, size=branch_hash_table.nbytes
     )
 
-    bht: 'npt.NDArray' = np.ndarray(
+    bht: npt.NDArray = np.ndarray(
         branch_hash_table.shape, dtype=branch_hash_table.dtype, buffer=branch_hash_table_shm.buf
     )
     bht[:] = branch_hash_table[:]
-    wgt: 'npt.NDArray' = np.ndarray(weights.shape, dtype=weights.dtype, buffer=weights_shm.buf)
+    wgt: npt.NDArray = np.ndarray(weights.shape, dtype=weights.dtype, buffer=weights_shm.buf)
     wgt[:] = weights[:]
 
     shared_args = AggSharedArgs(
@@ -132,7 +133,7 @@ def run_aggregation(args: AggregationArgs, pool_executor: Optional[Executor] = N
 
     time_parallel_start = time.perf_counter()
     num_jobs = 0
-    log.info("starting %d calculations with %d workers" % (len(sites) * len(imts), NUM_WORKERS))
+    log.info("starting %d calculations with %d workers", len(sites) * len(imts), NUM_WORKERS)
 
     futures = {}
     # ds1 = get_realizations_dataset()
@@ -159,7 +160,7 @@ def run_aggregation(args: AggregationArgs, pool_executor: Optional[Executor] = N
         for future in as_completed(futures.keys()):
             if exception := future.exception():
                 num_failed += 1
-                log.error("Exception encountered for task args %s: %s" % (futures[future], repr(exception)))
+                log.error("Exception encountered for task args %s: %r", futures[future], exception)
 
     time_parallel_end = time.perf_counter()
     branch_hash_table_shm.close()
@@ -168,7 +169,7 @@ def run_aggregation(args: AggregationArgs, pool_executor: Optional[Executor] = N
     weights_shm.unlink()
 
     time1 = time.perf_counter()
-    log.info("total time: processed %d calculations in %0.3f seconds" % (num_jobs, time1 - time0))
-    log.info("time to perform aggregations after job setup %0.3f" % (time_parallel_end - time_parallel_start))
+    log.info("total time: processed %d calculations in %0.3f seconds", num_jobs, time1 - time0)
+    log.info("time to perform aggregations after job setup %0.3f", time_parallel_end - time_parallel_start)
 
     print(f"THERE ARE {num_failed} FAILED JOBS . . . ")

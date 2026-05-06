@@ -4,21 +4,20 @@ sources = toshi_hazard_post
 test: format lint unittest
 
 format:
-	isort $(sources) tests
-	black $(sources) tests
+	uv run ruff format $(sources) tests
 
 lint:
-	flake8 $(sources) tests
-	mypy $(sources) tests
+	uv run ruff check $(sources) tests
+	uv run mypy $(sources) tests
 
 unittest:
-	pytest
+	uv run pytest
 
 coverage:
-	pytest --cov=$(sources) --cov-branch --cov-report=term-missing tests
+	uv run pytest --cov=$(sources) --cov-branch --cov-report=term-missing tests
 
 pre-commit:
-	pre-commit run --all-files
+	uv run pre-commit run --all-files
 
 clean:
 	rm -rf .mypy_cache .pytest_cache
