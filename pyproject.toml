@@ -1,6 +1,6 @@
 [project]
 name = "toshi-hazard-post"
-version = "0.7.1"
+version = "0.7.2"
 readme = "README.md"
 description = "Hazard post-processing pipeline as serverless AWS infrastructure."
 authors = [
