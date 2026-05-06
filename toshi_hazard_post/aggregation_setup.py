@@ -104,7 +104,7 @@ def get_sites(
     if locations:
         coded_locations = get_locations(locations, resolution=0.001)
     elif locations_file:
-        coded_locations = get_locations([locations_file], resolution=0.001)
+        coded_locations = get_locations([str(locations_file)], resolution=0.001)
 
     if vs30s:
         sites = [Site(location, vs30) for location, vs30 in product(coded_locations, vs30s)]

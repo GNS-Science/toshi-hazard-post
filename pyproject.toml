@@ -75,6 +75,7 @@ include = ["toshi_hazard_post", "scripts", "tests"]
 
 [tool.mypy]
 ignore_missing_imports = true
+follow_untyped_imports = true
 
 [tool.ruff]
 line-length = 120

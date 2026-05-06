@@ -1,5 +1,7 @@
 """Classes for the combined SRM + GMCM logic trees used to define a seismic hazard model."""
 
+from __future__ import annotations
+
 import copy
 import logging
 import math
@@ -24,7 +26,7 @@ class HazardComponentBranch:
     The HazardComposite branch is the smallest unit necessary to create a hazard curve realization.
     """
 
-    def __init__(self, source_branch: 'SourceBranch', gmcm_branches: tuple['GMCMBranch']):
+    def __init__(self, source_branch: SourceBranch, gmcm_branches: tuple[GMCMBranch, ...]):
         """Initialize a new HazardComponentBranch object.
 
         Args:
@@ -32,7 +34,7 @@ class HazardComponentBranch:
             gmcm_branches: The GMCM branches that make up the composite branch.
         """
         self.source_branch = source_branch
-        self.gmcm_branches = gmcm_branches
+        self.gmcm_branches: tuple[GMCMBranch, ...] = gmcm_branches
         self.weight = math.prod([self.source_branch.weight] + [b.weight for b in self.gmcm_branches])
         self.gmcm_branches = tuple(self.gmcm_branches)
         self.hash_digest = self.source_hash_digest + self.gmcm_hash_digest
@@ -57,12 +59,16 @@ class HazardComponentBranch:
         """The hash digest of the gmcm branch."""
         if len(self.gmcm_branches) != 1:
             raise NotImplementedError("multiple gmcm branches for a component branch is not implemented")
-        return registry.gmm_registry.get_by_identity(self.gmcm_branches[0].registry_identity).hash_digest
+        entry = registry.gmm_registry.get_by_identity(self.gmcm_branches[0].registry_identity)
+        assert entry.hash_digest is not None
+        return entry.hash_digest
 
     @property
     def source_hash_digest(self) -> str:
         """The hash digest of the source branch."""
-        return registry.source_registry.get_by_identity(self.source_branch.registry_identity).hash_digest
+        entry = registry.source_registry.get_by_identity(self.source_branch.registry_identity)
+        assert entry.hash_digest is not None
+        return entry.hash_digest
 
 
 class HazardCompositeBranch:
@@ -92,7 +98,7 @@ class HazardCompositeBranch:
         gsim_weights = [gsim.weight for gsim in gsims]
         self.weight = math.prod(gsim_weights) * source_weight
 
-    def __iter__(self) -> 'HazardCompositeBranch':
+    def __iter__(self) -> HazardCompositeBranch:
         """Iterate over all HazardComponentBranches that make up the HazardCompositeBranch."""
         self.__counter = 0
         return self
@@ -110,7 +116,7 @@ class HazardCompositeBranch:
 class HazardLogicTree:
     """The combined (SRM + GMCM) logic tree needed to define the complete hazard model."""
 
-    def __init__(self, srm_logic_tree: 'SourceLogicTree', gmcm_logic_tree: 'GMCMLogicTree') -> None:
+    def __init__(self, srm_logic_tree: SourceLogicTree, gmcm_logic_tree: GMCMLogicTree) -> None:
         """Initialize a new HazardLogicTree object.
 
         Args:
@@ -158,7 +164,7 @@ class HazardLogicTree:
         return self._component_branches
 
     @property
-    def weights(self) -> 'npt.NDArray':
+    def weights(self) -> npt.NDArray:
         """The weights for every enumerated branch (srm + gmcm) of the logic tree.
 
         Returns:

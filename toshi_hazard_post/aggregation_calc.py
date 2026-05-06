@@ -261,13 +261,13 @@ def calc_aggregation(task_args: AggTaskArgs, shared_args: AggSharedArgs) -> None
     time2 = time.perf_counter()
     log.debug("worker %s: time to convert_probs_to_rates() %0.2f", worker_name, time2 - time1)
 
-    component_rates = create_component_dict(component_rates)
+    component_rates_dict = create_component_dict(component_rates)
 
     time3 = time.perf_counter()
     log.debug("worker %s: time to convert to dict and set digest index %0.2f seconds", worker_name, time3 - time2)
-    log.debug('worker %s: rates_table %d', worker_name, len(component_rates))
+    log.debug('worker %s: rates_table %d', worker_name, len(component_rates_dict))
 
-    composite_rates = build_branch_rates(branch_hash_table, component_rates)
+    composite_rates = build_branch_rates(branch_hash_table, component_rates_dict)
     time4 = time.perf_counter()
     log.debug("worker %s: time to build_ranch_rates %0.2f seconds", worker_name, time4 - time3)
 
