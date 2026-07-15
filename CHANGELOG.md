@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [0.7.3] - 2026-07-16
 ### Changed
 - Merged the `thp` CLI into the `toshi_hazard_post` package so the project builds and ships a single package. The `thp` console entry point now targets `toshi_hazard_post.cli:thp`.
 - Upgraded toshi-hazard-store>=2.1.1
