@@ -36,7 +36,7 @@ dependencies = [
 aws = ["boto3"]
 
 [project.scripts]
-thp = "scripts.cli:thp"
+thp = "toshi_hazard_post.cli:thp"
 
 [dependency-groups]
 dev = [
@@ -68,10 +68,10 @@ exclude-newer = "1 week"
 exclude-newer-package = { "nzshm-common" = false, "nzshm-model" = false, "toshi-hazard-store" = false }
 
 [tool.hatch.build.targets.wheel]
-packages = ["toshi_hazard_post", "scripts"]
+packages = ["toshi_hazard_post"]
 
 [tool.hatch.build.targets.sdist]
-include = ["toshi_hazard_post", "scripts", "tests"]
+include = ["toshi_hazard_post", "tests"]
 
 [tool.mypy]
 ignore_missing_imports = true
