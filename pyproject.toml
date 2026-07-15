@@ -27,9 +27,9 @@ dependencies = [
     "pydantic>=2.10.6",
     "tomlkit>=0.13.2",
     "numba>=0.60.0,<0.66",
-    "toshi-hazard-store>=1.1.0",
     "numpy>=2,<3",
     "tzdata>=2025.2,<2027.0",
+    "toshi-hazard-store>=2.1.1",
 ]
 
 [project.optional-dependencies]
