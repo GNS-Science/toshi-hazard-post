@@ -1,9 +1,10 @@
 # Changelog
 
-## [Unreleased]
+## [0.7.3] - 2026-07-16
 ### Changed
 - Merged the `thp` CLI into the `toshi_hazard_post` package so the project builds and ships a single package. The `thp` console entry point now targets `toshi_hazard_post.cli:thp`.
 - Upgraded toshi-hazard-store>=2.1.1
+- deps: patch (10 pkgs), minor (30 pkgs), major: mypy 1.20.2→2.2.0, pandas 2.3.3→3.0.3, pymdown-extensions 10.21.2→11.0.1, backrefs 6.2→7.0, cryptography 47.0.0→49.0.0, readme-renderer 44.0→45.0
 
 ## [0.7.2] - 2026-05-06
 ### Changed
