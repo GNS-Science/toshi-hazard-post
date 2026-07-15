@@ -3,4 +3,4 @@
 This application calculates seismic hazard from pre-calculated realizations.
 """
 
-__version__ = '0.7.2'
+from ._version import __version__
