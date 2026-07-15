@@ -14,7 +14,7 @@ import tomlkit
 from nzshm_model import all_model_versions
 from pydantic import AfterValidator, BaseModel, FilePath, PositiveInt, ValidationInfo, field_validator, model_validator
 from toshi_hazard_store.model.constraints import AggregationEnum, IntensityMeasureTypeEnum
-from toshi_hazard_store.scripts.ths_import import chc_manager
+from toshi_hazard_store.scripts.ths_rlz_import import chc_manager
 from typing_extensions import Self
 
 
