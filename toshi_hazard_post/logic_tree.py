@@ -5,19 +5,41 @@ from __future__ import annotations
 import copy
 import logging
 import math
+import warnings
 from itertools import chain, product
 from typing import TYPE_CHECKING
 
 import numpy as np
 import nzshm_model.branch_registry
+from nzshm_model.branch_registry import identity_digest
 
 if TYPE_CHECKING:
     import numpy.typing as npt
+    from nzshm_model.branch_registry import BranchRegistry
     from nzshm_model.logic_tree import GMCMBranch, GMCMLogicTree, SourceBranch, SourceLogicTree
 
 log = logging.getLogger(__name__)
 
 registry = nzshm_model.branch_registry.Registry()
+
+
+def _warn_if_unregistered(branch_registry: BranchRegistry, identity: str, kind: str) -> None:
+    """Warn if a branch identity is absent from the branch registry.
+
+    The registry is advisory: a hash digest is a pure function of the identity string, so an
+    unregistered branch still has a well defined digest. The warning preserves the registry's
+    value (traceability, catching a mistyped toshi id) without making an unpublished branch a
+    hard error. Callers can escalate or silence it with warnings.filterwarnings().
+
+    Args:
+        branch_registry: the registry to check the identity against.
+        identity: the registry identity string of the branch.
+        kind: the kind of branch ("source" or "gmcm"), used in the warning message.
+    """
+    try:
+        branch_registry.get_by_identity(identity)
+    except KeyError:
+        warnings.warn(f"unregistered {kind} branch identity: {identity}", UserWarning, stacklevel=3)
 
 
 class HazardComponentBranch:
@@ -59,16 +81,16 @@ class HazardComponentBranch:
         """The hash digest of the gmcm branch."""
         if len(self.gmcm_branches) != 1:
             raise NotImplementedError("multiple gmcm branches for a component branch is not implemented")
-        entry = registry.gmm_registry.get_by_identity(self.gmcm_branches[0].registry_identity)
-        assert entry.hash_digest is not None
-        return entry.hash_digest
+        identity = self.gmcm_branches[0].registry_identity
+        _warn_if_unregistered(registry.gmm_registry, identity, "gmcm")
+        return identity_digest(identity)
 
     @property
     def source_hash_digest(self) -> str:
         """The hash digest of the source branch."""
-        entry = registry.source_registry.get_by_identity(self.source_branch.registry_identity)
-        assert entry.hash_digest is not None
-        return entry.hash_digest
+        identity = self.source_branch.registry_identity
+        _warn_if_unregistered(registry.source_registry, identity, "source")
+        return identity_digest(identity)
 
 
 class HazardCompositeBranch:
