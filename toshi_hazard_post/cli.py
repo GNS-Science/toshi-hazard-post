@@ -6,6 +6,7 @@ from toshi_hazard_post.aggregation import run_aggregation
 from toshi_hazard_post.aggregation_args import load_input_args
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logging.captureWarnings(True)
 logging.getLogger('toshi_hazard_post').setLevel(logging.INFO)
 # logging.getLogger('toshi_hazard_post.aggregation_calc').setLevel(logging.DEBUG)
 # logging.getLogger('toshi_hazard_post.aggregation').setLevel(logging.DEBUG)

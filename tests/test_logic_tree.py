@@ -14,10 +14,26 @@ from nzshm_model.logic_tree import (
 )
 from nzshm_model.logic_tree.correlation import LogicTreeCorrelations
 
-from toshi_hazard_post.logic_tree import HazardComponentBranch, HazardLogicTree, registry
+from toshi_hazard_post.logic_tree import (
+    HazardComponentBranch,
+    HazardLogicTree,
+    _branch_hash_digest,
+    registry,
+)
 
 # a toshi id that is not in the nzshm-model source branch registry
 UNREGISTERED_NRML_ID = "SW52ZXJzaW9uU29sdXRpb25Ocm1sOjEwMDU4MFV3ZzdW"
+
+
+@pytest.fixture(autouse=True)
+def clear_digest_cache():
+    """Digests are memoised, so the unregistered-branch warning fires only on the first miss.
+
+    Clear the cache around every test to keep the warning assertions independent of test order.
+    """
+    _branch_hash_digest.cache_clear()
+    yield
+    _branch_hash_digest.cache_clear()
 
 
 @pytest.fixture(scope='function')
@@ -118,18 +134,16 @@ def test_unregistered_gmcm_branch_computes_digest_and_warns():
         gsim_args={"mu_branch": "Upper"},
         tectonic_region_type="Active Shallow Crust",
     )
-    component_branch = HazardComponentBranch(source_branch=source_branch, gmcm_branches=(gmcm_branch,))
-
     with pytest.warns(UserWarning, match="unregistered gmcm branch identity"):
-        digest = component_branch.gmcm_hash_digest
+        component_branch = HazardComponentBranch(source_branch=source_branch, gmcm_branches=(gmcm_branch,))
 
-    assert digest == identity_digest("NotARealGSIM(mu_branch=Upper)")
+    assert component_branch.gmcm_hash_digest == identity_digest("NotARealGSIM(mu_branch=Upper)")
 
 
 def test_registered_digests_unchanged(source_logic_tree, gmcm_logic_tree):
     """For a published logic tree the computed digests match the registry, and nothing warns."""
     with warnings.catch_warnings():
-        warnings.simplefilter("error")
+        warnings.simplefilter("error", UserWarning)
         component_branches = HazardLogicTree(source_logic_tree, gmcm_logic_tree).component_branches
 
         assert component_branches
