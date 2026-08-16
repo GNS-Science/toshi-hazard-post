@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.4] - 2026-08-17
+### Fixed
+- Branch hash digests are now computed from the branch registry identity rather than looked up in the nzshm-model
+  branch registry. Logic trees containing branches that are not in the published registry (e.g. newly computed
+  branches) no longer raise `KeyError`; an unregistered identity emits a `UserWarning` instead. Digests for
+  published models are unchanged. ([#91](https://github.com/GNS-Science/toshi-hazard-post/issues/91))
+
 ## [0.7.3] - 2026-07-16
 ### Changed
 - Merged the `thp` CLI into the `toshi_hazard_post` package so the project builds and ships a single package. The `thp` console entry point now targets `toshi_hazard_post.cli:thp`.

@@ -5,19 +5,56 @@ from __future__ import annotations
 import copy
 import logging
 import math
+import warnings
+from functools import cache
 from itertools import chain, product
 from typing import TYPE_CHECKING
 
 import numpy as np
 import nzshm_model.branch_registry
+from nzshm_model.branch_registry import identity_digest
 
 if TYPE_CHECKING:
     import numpy.typing as npt
+    from nzshm_model.branch_registry import BranchRegistry
     from nzshm_model.logic_tree import GMCMBranch, GMCMLogicTree, SourceBranch, SourceLogicTree
 
 log = logging.getLogger(__name__)
 
 registry = nzshm_model.branch_registry.Registry()
+
+
+@cache
+def _branch_hash_digest(branch_registry: BranchRegistry, identity: str, kind: str) -> str:
+    """The hash digest of a branch identity, warning if the identity is absent from the registry.
+
+    The registry is advisory: a hash digest is a pure function of the identity string, so an
+    unregistered branch still has a well defined digest. The warning preserves the registry's
+    value (traceability, catching a mistyped toshi id) without making an unpublished branch a
+    hard error. Callers can escalate or silence it with warnings.filterwarnings().
+
+    Memoised because a production logic tree holds millions of component branches drawn from only
+    a handful of distinct identities: this keeps identity_digest() off the hot path and emits the
+    warning once per identity rather than once per branch.
+
+    Args:
+        branch_registry: the registry to check the identity against.
+        identity: the registry identity string of the branch.
+        kind: the kind of branch ("source" or "gmcm"), used in the warning message.
+
+    Returns:
+        The hash digest of the identity.
+    """
+    try:
+        branch_registry.get_by_identity(identity)
+    except KeyError:
+        message = f"unregistered {kind} branch identity: {identity}"
+        # warnings.warn() only reaches stderr; also log so the message lands in the job log, where
+        # it is the one clue that a downstream "incorrect number of records found" was a bad id.
+        log.warning(message)
+        # 1: here, 2: the digest property, 3: HazardComponentBranch.__init__, 4: its caller.
+        warnings.warn(message, UserWarning, stacklevel=4)
+    return identity_digest(identity)
 
 
 class HazardComponentBranch:
@@ -50,25 +87,17 @@ class HazardComponentBranch:
             [branch.registry_identity for branch in self.gmcm_branches]
         )
 
-    # @property
-    # def hash_digest(self) -> str:
-    #     return self.source_hash_digest + self.gmcm_hash_digest
-
     @property
     def gmcm_hash_digest(self) -> str:
         """The hash digest of the gmcm branch."""
         if len(self.gmcm_branches) != 1:
             raise NotImplementedError("multiple gmcm branches for a component branch is not implemented")
-        entry = registry.gmm_registry.get_by_identity(self.gmcm_branches[0].registry_identity)
-        assert entry.hash_digest is not None
-        return entry.hash_digest
+        return _branch_hash_digest(registry.gmm_registry, self.gmcm_branches[0].registry_identity, "gmcm")
 
     @property
     def source_hash_digest(self) -> str:
         """The hash digest of the source branch."""
-        entry = registry.source_registry.get_by_identity(self.source_branch.registry_identity)
-        assert entry.hash_digest is not None
-        return entry.hash_digest
+        return _branch_hash_digest(registry.source_registry, self.source_branch.registry_identity, "source")
 
 
 class HazardCompositeBranch:
