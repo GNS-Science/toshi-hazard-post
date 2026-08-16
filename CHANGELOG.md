@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [0.7.4] - 2026-08-17
 ### Fixed
 - Branch hash digests are now computed from the branch registry identity rather than looked up in the nzshm-model
   branch registry. Logic trees containing branches that are not in the published registry (e.g. newly computed
