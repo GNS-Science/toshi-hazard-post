@@ -10,7 +10,7 @@
 - The weighted mean and std are calculated in a numba kernel that makes two passes over each level instead of
   allocating two temporaries the size of the composite rates array. For NSHM_v1.0.4 this is about 4x faster per
   (location, imt) task (~0.41 s to ~0.10 s) and removes ~660 MB of transient memory per worker. Mean, std and cov
-  change by floating point rounding only (up to 6e-13 relative).
+  change by floating point rounding only (up to 7e-15 relative).
   ([#95](https://github.com/GNS-Science/toshi-hazard-post/issues/95))
 - `calculators.weighted_avg_and_std` takes values with shape (IMTL, branch) rather than (branch, IMTL).
 - `aggregation_calc.calculate_aggs` takes composite rates with shape (IMTL, branch) rather than (branch, IMTL).

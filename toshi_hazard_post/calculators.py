@@ -65,6 +65,50 @@ def composite_rates(branch_index_table: 'npt.NDArray', component_rates: 'npt.NDA
     return rates
 
 
+# number of terms in each partial sum of the blocked sums
+SUM_BLOCK_SIZE = 256
+
+
+# The blocked sums accumulate partial sums of SUM_BLOCK_SIZE terms, which are then added together. A running
+# total is only ever added to numbers of a similar size, so the rounding error grows with the number of blocks
+# rather than with the number of terms.
+@jit(nopython=True)
+def _blocked_sum(values: 'npt.NDArray') -> float:
+    """Calculate the sum of a one dimensional array."""
+    total = 0.0
+    for start in range(0, values.shape[0], SUM_BLOCK_SIZE):
+        partial = 0.0
+        for j in range(start, min(start + SUM_BLOCK_SIZE, values.shape[0])):
+            partial += values[j]
+        total += partial
+    return total
+
+
+@jit(nopython=True)
+def _blocked_weighted_sum(weights: 'npt.NDArray', values: 'npt.NDArray') -> float:
+    """Calculate the sum of weights * values for one dimensional arrays of the same length."""
+    total = 0.0
+    for start in range(0, values.shape[0], SUM_BLOCK_SIZE):
+        partial = 0.0
+        for j in range(start, min(start + SUM_BLOCK_SIZE, values.shape[0])):
+            partial += weights[j] * values[j]
+        total += partial
+    return total
+
+
+@jit(nopython=True)
+def _blocked_weighted_sum_sq_dev(weights: 'npt.NDArray', values: 'npt.NDArray', center: float) -> float:
+    """Calculate the sum of weights * (values - center)^2 for one dimensional arrays of the same length."""
+    total = 0.0
+    for start in range(0, values.shape[0], SUM_BLOCK_SIZE):
+        partial = 0.0
+        for j in range(start, min(start + SUM_BLOCK_SIZE, values.shape[0])):
+            deviation = values[j] - center
+            partial += weights[j] * deviation * deviation
+        total += partial
+    return total
+
+
 @jit(nopython=True)
 def weighted_avg_and_std(values: 'npt.NDArray', weights: 'npt.NDArray') -> tuple['npt.NDArray', 'npt.NDArray']:
     """Calculate weighted average and standard deviation of an array.
@@ -83,22 +127,16 @@ def weighted_avg_and_std(values: 'npt.NDArray', weights: 'npt.NDArray') -> tuple
     nlevels, nbranches = values.shape
     if weights.shape[0] != nbranches:
         raise ValueError("weights must have one entry for each branch of values")
-    sum_weights = weights.sum()
+    sum_weights = _blocked_sum(weights)
     average = np.empty(nlevels)
     std = np.empty(nlevels)
     for i in range(nlevels):
-        total = 0.0
-        for j in range(nbranches):
-            total += weights[j] * values[i, j]
-        mean = total / sum_weights
+        mean = _blocked_weighted_sum(weights, values[i]) / sum_weights
         # the deviations are taken from the mean rather than using E[x^2] - mean^2, which loses precision
         # when the standard deviation is much smaller than the mean
-        variance = 0.0
-        for j in range(nbranches):
-            deviation = values[i, j] - mean
-            variance += weights[j] * deviation * deviation
+        variance = _blocked_weighted_sum_sq_dev(weights, values[i], mean) / sum_weights
         average[i] = mean
-        std[i] = np.sqrt(variance / sum_weights)
+        std[i] = np.sqrt(variance)
     return (average, std)
 
 

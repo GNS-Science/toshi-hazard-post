@@ -1,4 +1,5 @@
 import json
+import math
 import unittest
 from pathlib import Path
 
@@ -6,6 +7,10 @@ import numpy as np
 import pytest
 
 from toshi_hazard_post.calculators import (
+    SUM_BLOCK_SIZE,
+    _blocked_sum,
+    _blocked_weighted_sum,
+    _blocked_weighted_sum_sq_dev,
     composite_rates,
     cov,
     prob_to_rate,
@@ -106,6 +111,51 @@ class TestMeanStd:
         mean, std = func(values * 0.0, weights)
         weighted_cov = cov(mean, std)
         assert (weighted_cov == 0).all()
+
+
+def test_mean_std_rounding_error_does_not_grow_with_branches():
+    # summing these branches one after the other gives a mean with a relative error of 9e-14
+    rng = np.random.default_rng(0)
+    values = rng.random((2, 1_000_000))
+    weights = rng.random(1_000_000)
+
+    mean, std = weighted_avg_and_std(values, weights)
+
+    sum_weights = math.fsum(weights)
+    mean_expected = [math.fsum(weights * level) / sum_weights for level in values]
+    std_expected = [
+        math.sqrt(math.fsum(weights * (level - m) ** 2) / sum_weights)
+        for level, m in zip(values, mean_expected, strict=True)
+    ]
+    np.testing.assert_allclose(mean, mean_expected, rtol=2e-14)
+    np.testing.assert_allclose(std, std_expected, rtol=2e-14)
+
+
+# the lengths are either side of a whole number of blocks
+@pytest.mark.parametrize("nterms", [0, 1, SUM_BLOCK_SIZE - 1, SUM_BLOCK_SIZE, 3 * SUM_BLOCK_SIZE + 7])
+class TestBlockedSums:
+    @pytest.fixture
+    def weights_and_values(self, nterms):
+        rng = np.random.default_rng(nterms)
+        return rng.random(nterms), rng.random(nterms)
+
+    @pytest.mark.parametrize("func", [_blocked_sum, _blocked_sum.py_func], ids=["jit", "python"])
+    def test_blocked_sum(self, func, weights_and_values):
+        _, values = weights_and_values
+        assert func(values) == pytest.approx(math.fsum(values), rel=1e-14)
+
+    @pytest.mark.parametrize("func", [_blocked_weighted_sum, _blocked_weighted_sum.py_func], ids=["jit", "python"])
+    def test_blocked_weighted_sum(self, func, weights_and_values):
+        weights, values = weights_and_values
+        assert func(weights, values) == pytest.approx(math.fsum(weights * values), rel=1e-14)
+
+    @pytest.mark.parametrize(
+        "func", [_blocked_weighted_sum_sq_dev, _blocked_weighted_sum_sq_dev.py_func], ids=["jit", "python"]
+    )
+    def test_blocked_weighted_sum_sq_dev(self, func, weights_and_values):
+        weights, values = weights_and_values
+        expected = math.fsum(weights * (values - 0.3) ** 2)
+        assert func(weights, values, 0.3) == pytest.approx(expected, rel=1e-14)
 
 
 class TestQuantiles(unittest.TestCase):
