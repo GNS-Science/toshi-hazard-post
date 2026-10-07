@@ -75,15 +75,14 @@ def build_branch_index_table(
     Raises:
         KeyError: if the branch hash table has a digest that is not in component_digests.
     """
-    hash_table = np.asarray(branch_hash_table)
-    digests, inverse = np.unique(hash_table, return_inverse=True)
     index = {digest: i for i, digest in enumerate(component_digests)}
-    missing = [str(digest) for digest in digests if str(digest) not in index]
-    if missing:
-        raise KeyError(f"branch hash table digests are not component branches: {missing}")
     dtype = np.min_scalar_type(max(len(component_digests) - 1, 0))
-    lookup = np.array([index[str(digest)] for digest in digests], dtype=dtype)
-    return lookup[inverse.reshape(hash_table.shape)]
+    # look the digests up one at a time: the table has millions of entries, so avoid a string array copy of it
+    try:
+        indices = np.fromiter((index[digest] for digest in chain.from_iterable(branch_hash_table)), dtype=dtype)
+    except KeyError as err:
+        raise KeyError(f"branch hash table digest is not a component branch: {err.args[0]}") from None
+    return indices.reshape(len(branch_hash_table), -1)
 
 
 class HazardComponentBranch:
