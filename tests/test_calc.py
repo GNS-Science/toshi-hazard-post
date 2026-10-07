@@ -146,8 +146,16 @@ def test_component_array():
     assert component_array.tolist() == [[1.0, 10.0], [2.0, 20.0], [3.0, 30.0]]
 
 
-@pytest.mark.parametrize("component_digests", [['abc123', 'def456', 'xyz000'], ['abc123']])
-def test_component_array_digest_mismatch(component_digests):
+@pytest.mark.parametrize(
+    "component_digests,message",
+    [
+        (['abc123', 'def456', 'xyz000'], r"1 component branches have no rates \(first \['xyz000'\]\), 0 rates are"),
+        (['abc123'], r"0 component branches have no rates \(first \[\]\), 1 rates are"),
+        # the right number of rows, but for the wrong branches
+        (['abc123', 'xyz000'], r"1 component branches have no rates \(first \['xyz000'\]\), 1 rates are"),
+    ],
+)
+def test_component_array_digest_mismatch(component_digests, message):
     d = {
         'sources_digest': ['def', 'abc'],
         'gmms_digest': ['456', '123'],
@@ -155,5 +163,14 @@ def test_component_array_digest_mismatch(component_digests):
     }
     df = pd.DataFrame(d)
 
-    with pytest.raises(KeyError):
+    with pytest.raises(KeyError, match=message):
         aggregation_calc.create_component_array(df, component_digests)
+
+
+def test_component_array_digest_mismatch_message_is_short():
+    df = pd.DataFrame({'sources_digest': ['abc'], 'gmms_digest': ['123'], 'rates': [np.array([1.0])]})
+    component_digests = [f"missing{i}" for i in range(1000)]
+
+    with pytest.raises(KeyError) as excinfo:
+        aggregation_calc.create_component_array(df, component_digests)
+    assert len(str(excinfo.value)) < 500

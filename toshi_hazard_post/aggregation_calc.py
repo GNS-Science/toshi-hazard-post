@@ -198,8 +198,12 @@ def create_component_array(component_rates: 'pd.DataFrame', component_digests: S
     row = {digest: i for i, digest in enumerate(digests)}
     missing = [digest for digest in component_digests if digest not in row]
     if missing or len(digests) != len(component_digests):
+        # every task of a bad run fails the same way, so keep the message short
+        n_unexpected = len(digests) - (len(component_digests) - len(missing))
         raise KeyError(
-            f"expected rates for {len(component_digests)} component branches, got {len(digests)}; missing {missing}"
+            f"expected rates for {len(component_digests)} component branches, got {len(digests)}: "
+            f"{len(missing)} component branches have no rates (first {missing[:5]}), "
+            f"{n_unexpected} rates are duplicates or not for a component branch"
         )
     order = [row[digest] for digest in component_digests]
     return np.stack(component_rates['rates'].to_numpy())[order]
