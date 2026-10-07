@@ -107,30 +107,24 @@ def main() -> None:
     )
 
     print("\n--- toshi_hazard_post: integer index table ---")
-    if not hasattr(logic_tree, 'build_branch_index_table'):
-        print("build_branch_index_table() not found: issue #93 is not implemented in this checkout")
-        rates = rates_legacy
-    else:
-        branch_index_table = logic_tree.build_branch_index_table(branch_hash_table, component_digests)
-        print(f"{'shared table size':<58s} {branch_index_table.nbytes / 2**20:8.1f} MB ({branch_index_table.dtype})")
-        time_it(
-            "build index table (once per run, in the parent)",
-            lambda: logic_tree.build_branch_index_table(branch_hash_table, component_digests),
-            args.repeat,
-        )
-        # the first call includes numba compilation, which happens once per worker process
-        t_first = timeit.timeit(
-            lambda: aggregation_calc.build_branch_rates(branch_index_table, component_rates), number=1
-        )
-        print(f"{'build composite rates, first call (includes JIT compile)':<58s} {t_first:13.4f} s")
-        rates = aggregation_calc.build_branch_rates(branch_index_table, component_rates)
-        t_new = time_it(
-            "build composite rates (per task)",
-            lambda: aggregation_calc.build_branch_rates(branch_index_table, component_rates),
-            args.repeat,
-        )
-        print(f"\nspeedup of build composite rates: {t_legacy / t_new:.1f}x")
-        print(f"rates identical to legacy (level-major vs branch-major): {np.array_equal(rates.T, rates_legacy)}")
+    branch_index_table = logic_tree.build_branch_index_table(branch_hash_table, component_digests)
+    print(f"{'shared table size':<58s} {branch_index_table.nbytes / 2**20:8.1f} MB ({branch_index_table.dtype})")
+    time_it(
+        "build index table (once per run, in the parent)",
+        lambda: logic_tree.build_branch_index_table(branch_hash_table, component_digests),
+        args.repeat,
+    )
+    # the first call includes numba compilation, which happens once per worker process
+    t_first = timeit.timeit(lambda: aggregation_calc.build_branch_rates(branch_index_table, component_rates), number=1)
+    print(f"{'build composite rates, first call (includes JIT compile)':<58s} {t_first:13.4f} s")
+    rates = aggregation_calc.build_branch_rates(branch_index_table, component_rates)
+    t_new = time_it(
+        "build composite rates (per task)",
+        lambda: aggregation_calc.build_branch_rates(branch_index_table, component_rates),
+        args.repeat,
+    )
+    print(f"\nspeedup of build composite rates: {t_legacy / t_new:.1f}x")
+    print(f"rates identical to legacy (level-major vs branch-major): {np.array_equal(rates.T, rates_legacy)}")
 
     print("\n--- downstream: calculate_aggs() on the rates produced above ---")
     aggs = aggregation_calc.calculate_aggs(rates, weights, AGG_TYPES)
