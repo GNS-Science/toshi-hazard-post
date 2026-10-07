@@ -5,7 +5,14 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from toshi_hazard_post.calculators import cov, prob_to_rate, rate_to_prob, weighted_avg_and_std, weighted_quantiles
+from toshi_hazard_post.calculators import (
+    composite_rates,
+    cov,
+    prob_to_rate,
+    rate_to_prob,
+    weighted_avg_and_std,
+    weighted_quantiles,
+)
 
 
 class TestProbRate(unittest.TestCase):
@@ -84,3 +91,29 @@ class TestQuantiles(unittest.TestCase):
             aggs[:, i] = weighted_quantiles(self.rates[:, i], self.weights, quantiles)
 
         np.testing.assert_allclose(aggs, self.aggs_expected, verbose=True)
+
+
+# coverage cannot trace numba compiled code, so the kernel is also run as plain Python (py_func)
+@pytest.mark.parametrize("func", [composite_rates, composite_rates.py_func], ids=["jit", "python"])
+@pytest.mark.parametrize("index_dtype", [np.uint8, np.uint16, np.uint32, np.int64])
+def test_composite_rates(func, index_dtype):
+    # 3 component branches x 2 levels
+    component_rates = np.array([[1.0, 2.0], [10.0, 20.0], [100.0, 200.0]])
+    # 4 composite branches x 2 component branches
+    branch_index_table = np.array([[0, 1], [2, 2], [1, 0], [0, 2]], dtype=index_dtype)
+
+    rates = func(branch_index_table, component_rates)
+
+    # (level, composite branch)
+    assert rates.shape == (2, 4)
+    assert rates.tolist() == [[11.0, 200.0, 11.0, 101.0], [22.0, 400.0, 22.0, 202.0]]
+
+
+@pytest.mark.parametrize("func", [composite_rates, composite_rates.py_func], ids=["jit", "python"])
+def test_composite_rates_single_component(func):
+    component_rates = np.array([[1.0, 2.0, 3.0], [10.0, 20.0, 30.0]])
+    branch_index_table = np.array([[1], [0], [1]], dtype=np.uint16)
+
+    rates = func(branch_index_table, component_rates)
+
+    assert rates.tolist() == [[10.0, 1.0, 10.0], [20.0, 2.0, 20.0], [30.0, 3.0, 30.0]]
