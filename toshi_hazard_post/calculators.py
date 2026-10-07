@@ -65,21 +65,39 @@ def composite_rates(branch_index_table: 'npt.NDArray', component_rates: 'npt.NDA
     return rates
 
 
+@jit(nopython=True)
 def weighted_avg_and_std(values: 'npt.NDArray', weights: 'npt.NDArray') -> tuple['npt.NDArray', 'npt.NDArray']:
     """Calculate weighted average and standard deviation of an array.
 
+    Each level is reduced in two passes over its branches (the mean, then the deviations from the mean) without
+    allocating any array the size of values.
+
     Args:
-        values: array of values (branch, IMTL)
-        weights: weights of values (branch, )
+        values: array of values (IMTL, branch)
+        weights: weights of values (branch, ). They do not need to sum to 1.
 
     Returns:
         A tuple of (mean, std) where mean is the weighted mean and
             std is the standard devaition both with size (IMTL, ).
     """
-    average = np.average(values, weights=weights, axis=0)
-    # Fast and numerically precise:
-    variance = np.average((values - average) ** 2, weights=weights, axis=0)
-    return (average, np.sqrt(variance))
+    nlevels, nbranches = values.shape
+    sum_weights = weights.sum()
+    average = np.empty(nlevels)
+    std = np.empty(nlevels)
+    for i in range(nlevels):
+        total = 0.0
+        for j in range(nbranches):
+            total += weights[j] * values[i, j]
+        mean = total / sum_weights
+        # the deviations are taken from the mean rather than using E[x^2] - mean^2, which loses precision
+        # when the standard deviation is much smaller than the mean
+        variance = 0.0
+        for j in range(nbranches):
+            deviation = values[i, j] - mean
+            variance += weights[j] * deviation * deviation
+        average[i] = mean
+        std[i] = np.sqrt(variance / sum_weights)
+    return (average, std)
 
 
 def cov(mean: 'npt.NDArray', std: 'npt.NDArray') -> 'npt.NDArray':

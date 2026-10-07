@@ -38,26 +38,60 @@ class TestProbRate(unittest.TestCase):
         assert np.allclose(probs, self._probs)
 
 
-class TestMeanStd(unittest.TestCase):
-    def setUp(self):
-        self._weights_values_file = Path(Path(__file__).parent, 'fixtures/calculators', 'weights_and_values.json')
-        self._mean_expected = np.array([4.48577620473112, 4.48577620473112 * 2.0])
-        self._std_expected = np.array([2.6294520822489, 2.6294520822489 * 2.0])
+@pytest.fixture
+def weights_and_values():
+    filepath = Path(__file__).parent / 'fixtures' / 'calculators' / 'weights_and_values.json'
+    w_and_v = json.load(open(filepath))
+    weights = np.array(w_and_v['weights'])
+    values = np.array(w_and_v['values'])
+    # (level, branch)
+    return weights, np.vstack((values, values * 2.0))
 
-        w_and_v = json.load(open(self._weights_values_file))
-        self._weights = np.array(w_and_v['weights'])
-        self._values = np.array(w_and_v['values'])
-        self._values = np.vstack((self._values, self._values * 2.0)).transpose()
 
-    def test_weighted_avg_and_std(self):
-        mean, std = weighted_avg_and_std(self._values, self._weights)
+# coverage cannot trace numba compiled code, so the kernels are also run as plain Python (py_func)
+@pytest.mark.parametrize("func", [weighted_avg_and_std, weighted_avg_and_std.py_func], ids=["jit", "python"])
+class TestMeanStd:
+    def test_weighted_avg_and_std(self, func, weights_and_values):
+        weights, values = weights_and_values
+        mean, std = func(values, weights)
 
-        assert mean == pytest.approx(self._mean_expected)
-        assert std == pytest.approx(self._std_expected)
+        assert mean == pytest.approx(np.array([4.48577620473112, 4.48577620473112 * 2.0]))
+        assert std == pytest.approx(np.array([2.6294520822489, 2.6294520822489 * 2.0]))
 
-    def test_zero_mean(self):
-        values = self._values * 0.0
-        mean, std = weighted_avg_and_std(values, self._weights)
+    def test_matches_numpy(self, func):
+        rng = np.random.default_rng(0)
+        # (level, branch), with levels that differ by orders of magnitude like a hazard curve
+        values = rng.random((5, 1000)) * np.logspace(-1, -7, 5)[:, None]
+        weights = rng.random(1000)
+
+        mean, std = func(values, weights)
+
+        mean_expected = np.average(values, weights=weights, axis=1)
+        variance_expected = np.average((values - mean_expected[:, None]) ** 2, weights=weights, axis=1)
+        assert mean.shape == std.shape == (5,)
+        np.testing.assert_allclose(mean, mean_expected, rtol=1e-12)
+        np.testing.assert_allclose(std, np.sqrt(variance_expected), rtol=1e-12)
+
+    def test_weights_not_normalized(self, func, weights_and_values):
+        weights, values = weights_and_values
+        mean, std = func(values, weights)
+        mean_scaled, std_scaled = func(values, weights * 7.0)
+
+        assert mean_scaled == pytest.approx(mean)
+        assert std_scaled == pytest.approx(std)
+
+    def test_does_not_need_contiguous_values(self, func, weights_and_values):
+        weights, values = weights_and_values
+        mean, std = func(values, weights)
+        # a transposed (branch, level) array is a non contiguous view when turned back to (level, branch)
+        mean_view, std_view = func(np.ascontiguousarray(values.T).T, weights)
+
+        assert mean_view.tolist() == mean.tolist()
+        assert std_view.tolist() == std.tolist()
+
+    def test_zero_mean(self, func, weights_and_values):
+        weights, values = weights_and_values
+        mean, std = func(values * 0.0, weights)
         weighted_cov = cov(mean, std)
         assert (weighted_cov == 0).all()
 
@@ -93,7 +127,6 @@ class TestQuantiles(unittest.TestCase):
         np.testing.assert_allclose(aggs, self.aggs_expected, verbose=True)
 
 
-# coverage cannot trace numba compiled code, so the kernel is also run as plain Python (py_func)
 @pytest.mark.parametrize("func", [composite_rates, composite_rates.py_func], ids=["jit", "python"])
 @pytest.mark.parametrize("index_dtype", [np.uint8, np.uint16, np.uint32, np.int64])
 def test_composite_rates(func, index_dtype):
