@@ -81,6 +81,8 @@ def weighted_avg_and_std(values: 'npt.NDArray', weights: 'npt.NDArray') -> tuple
             std is the standard devaition both with size (IMTL, ).
     """
     nlevels, nbranches = values.shape
+    if weights.shape[0] != nbranches:
+        raise ValueError("weights must have one entry for each branch of values")
     sum_weights = weights.sum()
     average = np.empty(nlevels)
     std = np.empty(nlevels)

@@ -80,6 +80,18 @@ class TestMeanStd:
         assert mean_scaled == pytest.approx(mean)
         assert std_scaled == pytest.approx(std)
 
+    @pytest.mark.parametrize("nweights", [4, 20])
+    def test_weights_must_match_branches(self, func, nweights):
+        values = np.ones((3, 10))
+        with pytest.raises(ValueError, match="one entry for each branch"):
+            func(values, np.ones(nweights))
+
+    def test_rejects_branch_major_values(self, func):
+        # (branch, level) was the layout before the kernel was written for (level, branch)
+        values = np.ones((10, 3))
+        with pytest.raises(ValueError, match="one entry for each branch"):
+            func(values, np.ones(10))
+
     def test_does_not_need_contiguous_values(self, func, weights_and_values):
         weights, values = weights_and_values
         mean, std = func(values, weights)

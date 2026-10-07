@@ -102,6 +102,11 @@ def run_aggregation(args: AggregationArgs, pool_executor: Executor | None = None
     else:
         branch_hash_table = np.load(args.debug.restart[0])
         weights = np.load(args.debug.restart[1])
+        if weights.shape != (len(branch_hash_table),):
+            raise ValueError(
+                f"restart files do not match: {args.debug.restart[0]} has {len(branch_hash_table)} composite branches "
+                f"and {args.debug.restart[1]} has weights with shape {weights.shape}"
+            )
 
     agg_types = [a.value for a in args.calculation.agg_types]
     imts = [i.value for i in args.calculation.imts]
