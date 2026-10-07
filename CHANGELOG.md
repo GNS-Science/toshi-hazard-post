@@ -1,5 +1,19 @@
 # Changelog
 
+## [Unreleased]
+### Changed
+- Composite branch rates are built from a table of integer indices into the component branches, summed in a numba
+  kernel, instead of a Python loop with digest string lookups. For NSHM_v1.0.4 this is about 24x faster per
+  (location, imt) task (~5.4 s to ~0.24 s) and the shared memory table shrinks from 359 MB to 7.5 MB. Aggregates
+  are unchanged apart from floating point rounding in mean, std and cov (up to 7e-14 relative).
+  ([#93](https://github.com/GNS-Science/toshi-hazard-post/issues/93))
+- `aggregation_calc.calculate_aggs` takes composite rates with shape (IMTL, branch) rather than (branch, IMTL).
+- The error raised when a job's realizations do not match the component branches reports counts and the first few
+  missing digests rather than every digest.
+
+### Removed
+- `aggregation_calc.calc_composite_rates` and `aggregation_calc.create_component_dict`.
+
 ## [0.7.4] - 2026-08-17
 ### Fixed
 - Branch hash digests are now computed from the branch registry identity rather than looked up in the nzshm-model

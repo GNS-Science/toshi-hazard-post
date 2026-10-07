@@ -6,7 +6,7 @@ import pytest
 from nzshm_model.logic_tree import GMCMLogicTree, SourceLogicTree
 
 import toshi_hazard_post.aggregation_calc as aggregation_calc
-from toshi_hazard_post.logic_tree import HazardLogicTree
+from toshi_hazard_post.logic_tree import HazardLogicTree, build_branch_index_table
 
 # from toshi_hazard_post.data import ValueStore
 
@@ -23,23 +23,14 @@ def logic_tree():
 
 
 @pytest.fixture(scope='function')
-def component_rates_all(logic_tree):
-
-    component_rates = dict()
-    for i, branch in enumerate(logic_tree.component_branches):
-        values = np.linspace(0, 1, 10) * i
-        component_rates[branch.hash_digest] = values
-    return component_rates
+def component_digests(logic_tree):
+    return logic_tree.component_digests
 
 
 @pytest.fixture(scope='function')
-def value_store_small(logic_tree):
-
-    component_rates = dict()
-    for i, branch in enumerate(logic_tree.composite_branches[0].branches):
-        values = np.linspace(0, 1, 10) * i
-        component_rates[branch.hash_digest] = values
-    return component_rates
+def component_rates_all(component_digests):
+    # row i is the rate curve of component branch i
+    return np.outer(np.arange(len(component_digests)), np.linspace(0, 1, NLEVELS))
 
 
 @pytest.fixture(scope='function')
@@ -49,32 +40,39 @@ def branch_hashes(logic_tree):
 
 @pytest.fixture(scope='function')
 def branch_rates():
+    # the fixture is stored as (branch, level); calculate_aggs takes (level, branch)
     branch_rates_filepath = Path(__file__).parent / 'fixtures/calc/branch_rates.npy'
-    return np.load(branch_rates_filepath)
+    return np.ascontiguousarray(np.load(branch_rates_filepath).T)
 
 
-# here we use value_store_all to make sure that component_branches and composite_branches.branches load into
-# ValueStore the same way
-def test_calc_composite_rates1(branch_hashes, component_rates_all):
-    rates = aggregation_calc.calc_composite_rates(branch_hashes[0], component_rates_all, NLEVELS)
-    assert rates.shape == (NLEVELS,)
+def test_build_branch_rates():
+    component_rates = np.array([[1.0, 2.0, 3.0], [10.0, 20.0, 30.0], [100.0, 200.0, 300.0]])
+    index_table = np.array([[0, 1], [2, 2]], dtype=np.uint16)
+    rates = aggregation_calc.build_branch_rates(index_table, component_rates)
+    # (level, composite branch)
+    assert rates.tolist() == [[11.0, 200.0], [22.0, 400.0], [33.0, 600.0]]
 
 
-# here we use values_store_small to make sure that the calculated rate is correct
-def test_calc_composite_rates2(logic_tree, branch_hashes, value_store_small):
-    rates_expected = np.zeros((NLEVELS,))
-    rates = aggregation_calc.calc_composite_rates(branch_hashes[0], value_store_small, NLEVELS)
-    for i in range(len(logic_tree.composite_branches[0].branches)):
-        rates_expected += np.linspace(0, 1, NLEVELS) * i
-
-    assert np.array_equal(rates, rates_expected)
+def test_build_branch_rates_index_out_of_range():
+    component_rates = np.array([[1.0, 2.0], [10.0, 20.0]])
+    index_table = np.array([[0, 2]], dtype=np.uint16)
+    with pytest.raises(IndexError):
+        aggregation_calc.build_branch_rates(index_table, component_rates)
 
 
-def test_build_branch_rates1(logic_tree, branch_hashes, component_rates_all):
+# use a real logic tree to make sure that component_branches and composite_branches.branches index the same way
+def test_build_branch_rates_logic_tree(logic_tree, branch_hashes, component_digests, component_rates_all):
+    index_table = build_branch_index_table(branch_hashes, component_digests)
+    rates = aggregation_calc.build_branch_rates(index_table, component_rates_all)
 
-    rates = aggregation_calc.build_branch_rates(branch_hashes, component_rates_all)
-    nbranches = len(list(logic_tree.composite_branches))
-    assert rates.shape == (nbranches, NLEVELS)
+    nbranches = len(logic_tree.composite_branches)
+    assert rates.shape == (NLEVELS, nbranches)
+
+    for i_composite in (0, nbranches - 1):
+        rates_expected = np.zeros((NLEVELS,))
+        for branch in logic_tree.composite_branches[i_composite].branches:
+            rates_expected += np.linspace(0, 1, NLEVELS) * component_digests.index(branch.hash_digest)
+        assert np.array_equal(rates[:, i_composite], rates_expected)
 
 
 @pytest.fixture(scope='module')
@@ -122,7 +120,7 @@ def test_calculate_aggs(branch_rates):
 def test_agg_types(branch_rates, agg_types):
     weights = np.array([0.1, 0.1, 0.2, 0.3, 0.1, 0.2])
     hazard_agg = aggregation_calc.calculate_aggs(branch_rates, weights, agg_types)
-    assert hazard_agg.shape == (len(agg_types), branch_rates.shape[1])
+    assert hazard_agg.shape == (len(agg_types), branch_rates.shape[0])
 
 
 def test_convert_p2r():
@@ -135,10 +133,44 @@ def test_convert_p2r():
     assert all(df_out.loc[1]['rates'] == [0, 0, 0])
 
 
-def test_component_dict():
-    d = {'sources_digest': ['abc', 'def'], 'gmms_digest': ['123', '456'], 'rates': [1, 2]}
+def test_component_array():
+    d = {
+        'sources_digest': ['def', 'abc', 'ghi'],
+        'gmms_digest': ['456', '123', '789'],
+        'rates': [np.array([2.0, 20.0]), np.array([1.0, 10.0]), np.array([3.0, 30.0])],
+    }
     df = pd.DataFrame(d)
 
-    component_dict = aggregation_calc.create_component_dict(df)
+    component_array = aggregation_calc.create_component_array(df, ['abc123', 'def456', 'ghi789'])
 
-    assert list(component_dict.keys()) == ['abc123', 'def456']
+    assert component_array.tolist() == [[1.0, 10.0], [2.0, 20.0], [3.0, 30.0]]
+
+
+@pytest.mark.parametrize(
+    "component_digests,message",
+    [
+        (['abc123', 'def456', 'xyz000'], r"1 component branches have no rates \(first \['xyz000'\]\), 0 rates are"),
+        (['abc123'], r"0 component branches have no rates \(first \[\]\), 1 rates are"),
+        # the right number of rows, but for the wrong branches
+        (['abc123', 'xyz000'], r"1 component branches have no rates \(first \['xyz000'\]\), 1 rates are"),
+    ],
+)
+def test_component_array_digest_mismatch(component_digests, message):
+    d = {
+        'sources_digest': ['def', 'abc'],
+        'gmms_digest': ['456', '123'],
+        'rates': [np.array([2.0, 20.0]), np.array([1.0, 10.0])],
+    }
+    df = pd.DataFrame(d)
+
+    with pytest.raises(KeyError, match=message):
+        aggregation_calc.create_component_array(df, component_digests)
+
+
+def test_component_array_digest_mismatch_message_is_short():
+    df = pd.DataFrame({'sources_digest': ['abc'], 'gmms_digest': ['123'], 'rates': [np.array([1.0])]})
+    component_digests = [f"missing{i}" for i in range(1000)]
+
+    with pytest.raises(KeyError) as excinfo:
+        aggregation_calc.create_component_array(df, component_digests)
+    assert len(str(excinfo.value)) < 500

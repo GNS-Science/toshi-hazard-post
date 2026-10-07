@@ -37,7 +37,7 @@ A hazard curve is aggregated from pre-computed *realizations* held in an externa
 
 ### Hash digests are the join key
 
-This is the central idea and it spans `logic_tree.py`, `data.py`, and `aggregation_calc.py`. Every branch has a `registry_identity` string; its `identity_digest` is the primary key used to find that branch's realization rows in the dataset. `HazardComponentBranch.hash_digest` is `sources_digest + gmms_digest` concatenated, and the same concatenation is rebuilt from dataset columns in `create_component_dict()`. If digests don't line up, nothing matches.
+This is the central idea and it spans `logic_tree.py`, `data.py`, and `aggregation_calc.py`. Every branch has a `registry_identity` string; its `identity_digest` is the primary key used to find that branch's realization rows in the dataset. `HazardComponentBranch.hash_digest` is `sources_digest + gmms_digest` concatenated, and the same concatenation is rebuilt from dataset columns in `create_component_array()`. If digests don't line up, nothing matches.
 
 Digests are *computed*, not looked up: `nzshm_model`'s branch registry is advisory only, so an unregistered branch still gets a valid digest and only warns (`_branch_hash_digest` in `logic_tree.py`, memoised). The practical consequence is that a mistyped toshi id no longer fails fast — it produces a well-formed digest that matches nothing, and the run dies much later in `get_job_datatable` with `incorrect number of records found`. That warning is the clue.
 
@@ -48,7 +48,7 @@ The distinction drives the whole data model:
 - **Component branch** (`HazardComponentBranch`) — one SRM branch plus its TRT-matched GMCM branches. This is the smallest unit with a stored realization, and there are relatively few of them. Used to *query* the dataset.
 - **Composite branch** (`HazardCompositeBranch`) — one full realization of the entire logic tree, formed by the cartesian product across branch sets. There are millions for a production model. Used to *aggregate*.
 
-Rates are additive, probabilities are not — hence the prob→rate→aggregate→prob round trip. A composite branch's rate is the plain sum of its component branches' rates (`calc_composite_rates`).
+Rates are additive, probabilities are not — hence the prob→rate→aggregate→prob round trip. A composite branch's rate is the plain sum of its component branches' rates (`calculators.composite_rates`).
 
 `HazardLogicTree` drops GMCM branch sets whose TRT is absent from the source tree, then produces two big arrays: `weights` (one per composite branch) and `branch_hash_table` (each composite branch as a list of component digests).
 
@@ -57,9 +57,9 @@ Rates are additive, probabilities are not — hence the prob→rate→aggregate�
 `cli.py` → `aggregation.run_aggregation()` is the orchestrator:
 
 1. Resolve sites and logic trees (`aggregation_setup.py`), build `HazardLogicTree`.
-2. Compute `weights` and `branch_hash_table`, copy both into **named shared memory** so worker processes read them without pickling (names in `constants.py`).
+2. Compute `weights` and `branch_hash_table`, convert the hash table to a table of integer indices into `component_branches` (`build_branch_index_table` in `logic_tree.py`), and copy the weights and index table into **named shared memory** so worker processes read them without pickling (names in `constants.py`). Workers order each job's rates by the same component index, so composite rates are summed by position rather than by digest lookup.
 3. `_generate_agg_jobs()` batches work by `(vs30, nloc_0)` — a 1° location bin — so the parquet dataset is scanned once per batch rather than per site. Each batch is sliced per `(location, imt)` and written as an ORC file to `WORKING_DIR`.
-4. Each ORC file becomes one task on a `ProcessPoolExecutor`; `aggregation_calc.calc_aggregation()` loads it, converts to rates, sums into composite rates via the shared hash table, computes weighted aggregates, converts back to probabilities, saves, and deletes its ORC file.
+4. Each ORC file becomes one task on a `ProcessPoolExecutor`; `aggregation_calc.calc_aggregation()` loads it, converts to rates, sums into composite rates via the shared index table (laid out level-major, `(IMTL, composite branch)`), computes weighted aggregates, converts back to probabilities, saves, and deletes its ORC file.
 
 Because the shared memory segments have fixed names and are created with `create=True` and unlinked without a `try/finally`, a crashed run leaves them behind and the next run fails with `FileExistsError`. Two concurrent runs on one machine collide for the same reason.
 
