@@ -2,6 +2,7 @@ import math
 import warnings
 from pathlib import Path
 
+import numpy as np
 import pytest
 from nzshm_model.branch_registry import identity_digest
 from nzshm_model.logic_tree import (
@@ -18,6 +19,7 @@ from toshi_hazard_post.logic_tree import (
     HazardComponentBranch,
     HazardLogicTree,
     _branch_hash_digest,
+    build_branch_index_table,
     registry,
 )
 
@@ -152,3 +154,41 @@ def test_registered_digests_unchanged(source_logic_tree, gmcm_logic_tree):
             gmcm_entry = registry.gmm_registry.get_by_identity(branch.gmcm_branches[0].registry_identity)
             assert branch.source_hash_digest == source_entry.hash_digest
             assert branch.gmcm_hash_digest == gmcm_entry.hash_digest
+
+
+def test_build_branch_index_table():
+    branch_hash_table = [['b', 'a'], ['a', 'c'], ['c', 'c']]
+    index_table = build_branch_index_table(branch_hash_table, ['a', 'b', 'c'])
+    assert index_table.tolist() == [[1, 0], [0, 2], [2, 2]]
+    assert np.issubdtype(index_table.dtype, np.integer)
+
+
+def test_build_branch_index_table_from_array():
+    # the restart option loads the branch hash table as a numpy array of strings
+    branch_hash_table = np.array([['b', 'a'], ['a', 'c']])
+    index_table = build_branch_index_table(branch_hash_table, ['a', 'b', 'c'])
+    assert index_table.tolist() == [[1, 0], [0, 2]]
+
+
+def test_build_branch_index_table_many_components():
+    # more component branches than fit in a 16 bit index
+    component_digests = [str(i) for i in range(70_000)]
+    index_table = build_branch_index_table([['69999', '0'], ['256', '65536']], component_digests)
+    assert index_table.tolist() == [[69999, 0], [256, 65536]]
+
+
+def test_build_branch_index_table_unknown_digest():
+    with pytest.raises(KeyError, match='x'):
+        build_branch_index_table([['a', 'x']], ['a', 'b'])
+
+
+def test_component_digests_index_component_branches():
+    slt = SourceLogicTree.from_json(Path(__file__).parent / 'fixtures/slt.json')
+    glt = GMCMLogicTree.from_json(Path(__file__).parent / 'fixtures/glt.json')
+    logic_tree = HazardLogicTree(slt, glt)
+
+    digests = logic_tree.component_digests
+    assert len(digests) == len(logic_tree.component_branches)
+    for i in (0, len(digests) - 1):
+        branch = logic_tree.component_branches[i]
+        assert digests[i] == branch.source_hash_digest + branch.gmcm_hash_digest

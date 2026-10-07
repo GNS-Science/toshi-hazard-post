@@ -40,6 +40,31 @@ def rate_to_prob(rate: 'npt.NDArray', inv_time: float) -> 'npt.NDArray':
     return 1.0 - np.exp(-inv_time * rate)
 
 
+@jit(nopython=True)
+def composite_rates(branch_index_table: 'npt.NDArray', component_rates: 'npt.NDArray') -> 'npt.NDArray':
+    """Calculate the rates of the composite branches by summing the rates of their component branches.
+
+    The indices are not bounds checked, every entry of branch_index_table must be a valid row of component_rates.
+
+    Args:
+        branch_index_table: composite branches as rows of indices into component_rates (composite branch, component)
+        component_rates: rates of the component branches (component branch, IMTL)
+
+    Returns:
+        rates: hazard rates for the composite branches (IMTL, composite branch)
+    """
+    nbranches, ncomponents = branch_index_table.shape
+    nlevels = component_rates.shape[1]
+    rates = np.empty((nlevels, nbranches))
+    for i in range(nbranches):
+        for j in range(nlevels):
+            rate = 0.0
+            for k in range(ncomponents):
+                rate += component_rates[branch_index_table[i, k], j]
+            rates[j, i] = rate
+    return rates
+
+
 def weighted_avg_and_std(values: 'npt.NDArray', weights: 'npt.NDArray') -> tuple['npt.NDArray', 'npt.NDArray']:
     """Calculate weighted average and standard deviation of an array.
 

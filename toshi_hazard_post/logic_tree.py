@@ -15,6 +15,8 @@ import nzshm_model.branch_registry
 from nzshm_model.branch_registry import identity_digest
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     import numpy.typing as npt
     from nzshm_model.branch_registry import BranchRegistry
     from nzshm_model.logic_tree import GMCMBranch, GMCMLogicTree, SourceBranch, SourceLogicTree
@@ -55,6 +57,33 @@ def _branch_hash_digest(branch_registry: BranchRegistry, identity: str, kind: st
         # 1: here, 2: the digest property, 3: HazardComponentBranch.__init__, 4: its caller.
         warnings.warn(message, UserWarning, stacklevel=4)
     return identity_digest(identity)
+
+
+def build_branch_index_table(
+    branch_hash_table: Sequence[Sequence[str]] | npt.NDArray, component_digests: Sequence[str]
+) -> npt.NDArray:
+    """Convert the branch hash table to a table of indices into the component branches.
+
+    Args:
+        branch_hash_table: composite branches represented as a list of hashes of the component branches
+        component_digests: the hash digests of the component branches. The position of a digest in this
+            sequence is its index in the returned table.
+
+    Returns:
+        The index table with shape (n composite branches, n component branches per composite branch)
+
+    Raises:
+        KeyError: if the branch hash table has a digest that is not in component_digests.
+    """
+    hash_table = np.asarray(branch_hash_table)
+    digests, inverse = np.unique(hash_table, return_inverse=True)
+    index = {digest: i for i, digest in enumerate(component_digests)}
+    missing = [str(digest) for digest in digests if str(digest) not in index]
+    if missing:
+        raise KeyError(f"branch hash table digests are not component branches: {missing}")
+    dtype = np.min_scalar_type(max(len(component_digests) - 1, 0))
+    lookup = np.array([index[str(digest)] for digest in digests], dtype=dtype)
+    return lookup[inverse.reshape(hash_table.shape)]
 
 
 class HazardComponentBranch:
@@ -191,6 +220,15 @@ class HazardLogicTree:
         if not self._component_branches:
             self._generate_component_branches()
         return self._component_branches
+
+    @property
+    def component_digests(self) -> list[str]:
+        """The hash digests of the component branches, in the same order as component_branches.
+
+        Returns:
+            component_digests: the hash digest of each component branch
+        """
+        return [branch.hash_digest for branch in self.component_branches]
 
     @property
     def weights(self) -> npt.NDArray:

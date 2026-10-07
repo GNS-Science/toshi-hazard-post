@@ -2,7 +2,6 @@
 
 import itertools
 import logging
-import sys
 import time
 from collections.abc import Generator
 from concurrent.futures import Executor, ProcessPoolExecutor, as_completed
@@ -20,7 +19,7 @@ from toshi_hazard_post.aggregation_calc import AggSharedArgs, AggTaskArgs, calc_
 from toshi_hazard_post.aggregation_setup import Site, get_logic_trees, get_sites
 from toshi_hazard_post.data import get_batch_table, get_job_datatable, get_realizations_dataset
 from toshi_hazard_post.local_config import NUM_WORKERS, WORKING_DIR
-from toshi_hazard_post.logic_tree import HazardLogicTree
+from toshi_hazard_post.logic_tree import HazardLogicTree, build_branch_index_table
 
 if TYPE_CHECKING:
     import numpy.typing as npt
@@ -100,8 +99,6 @@ def run_aggregation(args: AggregationArgs, pool_executor: Executor | None = None
         toc = time.perf_counter()
 
         log.info('time to build weight array and hash table %0.2f seconds' % (toc - tic))
-        log.info("Size of weight array: %dMB", weights.nbytes >> 20)
-        log.info("Size of hash table: %dMB", sys.getsizeof(branch_hash_table) >> 20)
     else:
         branch_hash_table = np.load(args.debug.restart[0])
         weights = np.load(args.debug.restart[1])
@@ -109,22 +106,30 @@ def run_aggregation(args: AggregationArgs, pool_executor: Executor | None = None
     agg_types = [a.value for a in args.calculation.agg_types]
     imts = [i.value for i in args.calculation.imts]
 
+    # workers look up component rates by position, so replace each digest with its index in component_digests
+    component_digests = logic_tree.component_digests
+    branch_index_table = build_branch_index_table(branch_hash_table, component_digests)
+    del branch_hash_table
+    log.info("Size of weight array: %dMB", weights.nbytes >> 20)
+    log.info("Size of branch index table: %dMB", branch_index_table.nbytes >> 20)
+
     weights_shm = shared_memory.SharedMemory(name=constants.WEIGHTS_SHM_NAME, create=True, size=weights.nbytes)
-    branch_hash_table = np.array(branch_hash_table)
-    branch_hash_table_shm = shared_memory.SharedMemory(
-        name=constants.BRANCH_HASH_TABLE_SHM_NAME, create=True, size=branch_hash_table.nbytes
+    branch_index_table_shm = shared_memory.SharedMemory(
+        name=constants.BRANCH_INDEX_TABLE_SHM_NAME, create=True, size=branch_index_table.nbytes
     )
 
-    bht: npt.NDArray = np.ndarray(
-        branch_hash_table.shape, dtype=branch_hash_table.dtype, buffer=branch_hash_table_shm.buf
+    bit: npt.NDArray = np.ndarray(
+        branch_index_table.shape, dtype=branch_index_table.dtype, buffer=branch_index_table_shm.buf
     )
-    bht[:] = branch_hash_table[:]
+    bit[:] = branch_index_table[:]
     wgt: npt.NDArray = np.ndarray(weights.shape, dtype=weights.dtype, buffer=weights_shm.buf)
     wgt[:] = weights[:]
 
     shared_args = AggSharedArgs(
         weights_shape=weights.shape,
-        branch_hash_table_shape=branch_hash_table.shape,
+        branch_index_table_shape=branch_index_table.shape,
+        branch_index_table_dtype=branch_index_table.dtype.str,
+        component_digests=component_digests,
         agg_types=agg_types,
         hazard_model_id=args.general.hazard_model_id,
         compatibility_key=args.general.compatibility_key,
@@ -163,8 +168,8 @@ def run_aggregation(args: AggregationArgs, pool_executor: Executor | None = None
                 log.error("Exception encountered for task args %s: %r", futures[future], exception)
 
     time_parallel_end = time.perf_counter()
-    branch_hash_table_shm.close()
-    branch_hash_table_shm.unlink()
+    branch_index_table_shm.close()
+    branch_index_table_shm.unlink()
     weights_shm.close()
     weights_shm.unlink()
 
