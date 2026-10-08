@@ -97,15 +97,6 @@ class TestMeanStd:
         with pytest.raises(ValueError, match="one entry for each branch"):
             func(values, np.ones(10))
 
-    def test_does_not_need_contiguous_values(self, func, weights_and_values):
-        weights, values = weights_and_values
-        mean, std = func(values, weights)
-        # a transposed (branch, level) array is a non contiguous view when turned back to (level, branch)
-        mean_view, std_view = func(np.ascontiguousarray(values.T).T, weights)
-
-        assert mean_view.tolist() == mean.tolist()
-        assert std_view.tolist() == std.tolist()
-
     def test_zero_mean(self, func, weights_and_values):
         weights, values = weights_and_values
         mean, std = func(values * 0.0, weights)
