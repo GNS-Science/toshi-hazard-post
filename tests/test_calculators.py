@@ -26,7 +26,7 @@ class TestProbRate(unittest.TestCase):
         self._inv_time = 5.5
 
         self._rates_file = Path(Path(__file__).parent, 'fixtures/calculators', 'rates.json')
-        self._rates = np.array(json.load(open(self._rates_file)))
+        self._rates = np.array(json.loads(self._rates_file.read_text()))
 
     def test_prob_to_rate(self):
 
@@ -46,7 +46,7 @@ class TestProbRate(unittest.TestCase):
 @pytest.fixture
 def weights_and_values():
     filepath = Path(__file__).parent / 'fixtures' / 'calculators' / 'weights_and_values.json'
-    w_and_v = json.load(open(filepath))
+    w_and_v = json.loads(filepath.read_text())
     weights = np.array(w_and_v['weights'])
     values = np.array(w_and_v['values'])
     # (level, branch)
