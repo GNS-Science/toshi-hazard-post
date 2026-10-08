@@ -4,6 +4,7 @@ from pathlib import Path
 
 import numpy as np
 import pyarrow.dataset as ds
+import pytest
 from toshi_hazard_store.model.pyarrow import pyarrow_dataset
 
 import toshi_hazard_post.data
@@ -34,3 +35,17 @@ def test_end_to_end(monkeypatch, tmp_path):
     probs = np.stack(ds.Scanner.from_dataset(dataset).to_table().to_pandas()['values'].values)
 
     np.testing.assert_allclose(probs, probs_expected, rtol=1e-07, atol=1e-08)
+
+
+def test_restart_files_must_match(tmp_path):
+    bht_filepath = tmp_path / 'bht.npy'
+    weights_filepath = tmp_path / 'weights.npy'
+    np.save(bht_filepath, np.full((6, 2), 'abc'))
+    np.save(weights_filepath, np.ones(5))
+
+    agg_args = load_input_args(args_filepath)
+    agg_args.debug.restart = (bht_filepath, weights_filepath)
+
+    # raised before any shared memory is created
+    with pytest.raises(ValueError, match="restart files do not match"):
+        run_aggregation(agg_args, ThreadPoolExecutor())

@@ -1,4 +1,5 @@
 import json
+import math
 import unittest
 from pathlib import Path
 
@@ -6,6 +7,10 @@ import numpy as np
 import pytest
 
 from toshi_hazard_post.calculators import (
+    SUM_BLOCK_SIZE,
+    _blocked_sum,
+    _blocked_weighted_sum,
+    _blocked_weighted_sum_sq_dev,
     composite_rates,
     cov,
     prob_to_rate,
@@ -21,7 +26,7 @@ class TestProbRate(unittest.TestCase):
         self._inv_time = 5.5
 
         self._rates_file = Path(Path(__file__).parent, 'fixtures/calculators', 'rates.json')
-        self._rates = np.array(json.load(open(self._rates_file)))
+        self._rates = np.array(json.loads(self._rates_file.read_text()))
 
     def test_prob_to_rate(self):
 
@@ -38,28 +43,110 @@ class TestProbRate(unittest.TestCase):
         assert np.allclose(probs, self._probs)
 
 
-class TestMeanStd(unittest.TestCase):
-    def setUp(self):
-        self._weights_values_file = Path(Path(__file__).parent, 'fixtures/calculators', 'weights_and_values.json')
-        self._mean_expected = np.array([4.48577620473112, 4.48577620473112 * 2.0])
-        self._std_expected = np.array([2.6294520822489, 2.6294520822489 * 2.0])
+@pytest.fixture
+def weights_and_values():
+    filepath = Path(__file__).parent / 'fixtures' / 'calculators' / 'weights_and_values.json'
+    w_and_v = json.loads(filepath.read_text())
+    weights = np.array(w_and_v['weights'])
+    values = np.array(w_and_v['values'])
+    # (level, branch)
+    return weights, np.vstack((values, values * 2.0))
 
-        w_and_v = json.load(open(self._weights_values_file))
-        self._weights = np.array(w_and_v['weights'])
-        self._values = np.array(w_and_v['values'])
-        self._values = np.vstack((self._values, self._values * 2.0)).transpose()
 
-    def test_weighted_avg_and_std(self):
-        mean, std = weighted_avg_and_std(self._values, self._weights)
+# coverage cannot trace numba compiled code, so the kernels are also run as plain Python (py_func)
+@pytest.mark.parametrize("func", [weighted_avg_and_std, weighted_avg_and_std.py_func], ids=["jit", "python"])
+class TestMeanStd:
+    def test_weighted_avg_and_std(self, func, weights_and_values):
+        weights, values = weights_and_values
+        mean, std = func(values, weights)
 
-        assert mean == pytest.approx(self._mean_expected)
-        assert std == pytest.approx(self._std_expected)
+        assert mean == pytest.approx(np.array([4.48577620473112, 4.48577620473112 * 2.0]))
+        assert std == pytest.approx(np.array([2.6294520822489, 2.6294520822489 * 2.0]))
 
-    def test_zero_mean(self):
-        values = self._values * 0.0
-        mean, std = weighted_avg_and_std(values, self._weights)
+    def test_matches_numpy(self, func):
+        rng = np.random.default_rng(0)
+        # (level, branch), with levels that differ by orders of magnitude like a hazard curve
+        values = rng.random((5, 1000)) * np.logspace(-1, -7, 5)[:, None]
+        weights = rng.random(1000)
+
+        mean, std = func(values, weights)
+
+        mean_expected = np.average(values, weights=weights, axis=1)
+        variance_expected = np.average((values - mean_expected[:, None]) ** 2, weights=weights, axis=1)
+        assert mean.shape == std.shape == (5,)
+        np.testing.assert_allclose(mean, mean_expected, rtol=1e-12)
+        np.testing.assert_allclose(std, np.sqrt(variance_expected), rtol=1e-12)
+
+    def test_weights_not_normalized(self, func, weights_and_values):
+        weights, values = weights_and_values
+        mean, std = func(values, weights)
+        mean_scaled, std_scaled = func(values, weights * 7.0)
+
+        assert mean_scaled == pytest.approx(mean)
+        assert std_scaled == pytest.approx(std)
+
+    @pytest.mark.parametrize("nweights", [4, 20])
+    def test_weights_must_match_branches(self, func, nweights):
+        values = np.ones((3, 10))
+        with pytest.raises(ValueError, match="one entry for each branch"):
+            func(values, np.ones(nweights))
+
+    def test_rejects_branch_major_values(self, func):
+        # (branch, level) was the layout before the kernel was written for (level, branch)
+        values = np.ones((10, 3))
+        with pytest.raises(ValueError, match="one entry for each branch"):
+            func(values, np.ones(10))
+
+    def test_zero_mean(self, func, weights_and_values):
+        weights, values = weights_and_values
+        mean, std = func(values * 0.0, weights)
         weighted_cov = cov(mean, std)
         assert (weighted_cov == 0).all()
+
+
+def test_mean_std_rounding_error_does_not_grow_with_branches():
+    # summing these branches one after the other gives a mean with a relative error of 9e-14
+    rng = np.random.default_rng(0)
+    values = rng.random((2, 1_000_000))
+    weights = rng.random(1_000_000)
+
+    mean, std = weighted_avg_and_std(values, weights)
+
+    sum_weights = math.fsum(weights)
+    mean_expected = [math.fsum(weights * level) / sum_weights for level in values]
+    std_expected = [
+        math.sqrt(math.fsum(weights * (level - m) ** 2) / sum_weights)
+        for level, m in zip(values, mean_expected, strict=True)
+    ]
+    np.testing.assert_allclose(mean, mean_expected, rtol=2e-14)
+    np.testing.assert_allclose(std, std_expected, rtol=2e-14)
+
+
+# the lengths are either side of a whole number of blocks
+@pytest.mark.parametrize("nterms", [0, 1, SUM_BLOCK_SIZE - 1, SUM_BLOCK_SIZE, 3 * SUM_BLOCK_SIZE + 7])
+class TestBlockedSums:
+    @pytest.fixture
+    def weights_and_values(self, nterms):
+        rng = np.random.default_rng(nterms)
+        return rng.random(nterms), rng.random(nterms)
+
+    @pytest.mark.parametrize("func", [_blocked_sum, _blocked_sum.py_func], ids=["jit", "python"])
+    def test_blocked_sum(self, func, weights_and_values):
+        _, values = weights_and_values
+        assert func(values) == pytest.approx(math.fsum(values), rel=1e-14)
+
+    @pytest.mark.parametrize("func", [_blocked_weighted_sum, _blocked_weighted_sum.py_func], ids=["jit", "python"])
+    def test_blocked_weighted_sum(self, func, weights_and_values):
+        weights, values = weights_and_values
+        assert func(weights, values) == pytest.approx(math.fsum(weights * values), rel=1e-14)
+
+    @pytest.mark.parametrize(
+        "func", [_blocked_weighted_sum_sq_dev, _blocked_weighted_sum_sq_dev.py_func], ids=["jit", "python"]
+    )
+    def test_blocked_weighted_sum_sq_dev(self, func, weights_and_values):
+        weights, values = weights_and_values
+        expected = math.fsum(weights * (values - 0.3) ** 2)
+        assert func(weights, values, 0.3) == pytest.approx(expected, rel=1e-14)
 
 
 class TestQuantiles(unittest.TestCase):
@@ -93,7 +180,6 @@ class TestQuantiles(unittest.TestCase):
         np.testing.assert_allclose(aggs, self.aggs_expected, verbose=True)
 
 
-# coverage cannot trace numba compiled code, so the kernel is also run as plain Python (py_func)
 @pytest.mark.parametrize("func", [composite_rates, composite_rates.py_func], ids=["jit", "python"])
 @pytest.mark.parametrize("index_dtype", [np.uint8, np.uint16, np.uint32, np.int64])
 def test_composite_rates(func, index_dtype):
