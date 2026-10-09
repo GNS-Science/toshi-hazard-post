@@ -163,7 +163,8 @@ QUANTILE_NBINS = 65536
 QUANTILE_SORT_SIZE = 4096
 
 
-@jit(nopython=True)
+# this kernel takes several seconds to compile, so the compiled code is kept on disk (see warm_up())
+@jit(nopython=True, cache=True)
 def _select_quantiles(
     values: 'npt.NDArray',
     weights: 'npt.NDArray',
@@ -426,3 +427,12 @@ def weighted_quantiles(
         )  # fmt: skip
         wq[:, i] = level_quantiles
     return wq
+
+
+def warm_up() -> None:
+    """Compile the weighted quantiles kernel, or load it from the numba cache.
+
+    Call this before starting worker processes. Workers that are forked inherit the compiled kernel and workers
+    that are spawned load it from the cache, rather than each of them compiling it for their first task.
+    """
+    weighted_quantiles(np.zeros((1, 2)), np.ones(2), [0.5])
