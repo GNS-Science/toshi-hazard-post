@@ -238,10 +238,10 @@ def _select_quantiles(
             fp[p] = left_v
             p += 1
         cumulative = weight_below
-        for i in order:
-            cumulative += weights[i]
-            xp[p] = cumulative - 0.5 * weights[i]
-            fp[p] = values[i]
+        for index in order:
+            cumulative += weights[index]
+            xp[p] = cumulative - 0.5 * weights[index]
+            fp[p] = values[index]
             p += 1
         if has_right:
             xp[p] = right_x
