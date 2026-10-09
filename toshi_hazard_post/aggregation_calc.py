@@ -141,9 +141,7 @@ def calculate_aggs(branch_rates: 'npt.NDArray', weights: 'npt.NDArray', agg_type
         mean, std = calculators.weighted_avg_and_std(branch_rates, weights)
         cov = calculators.cov(mean, std)
     if quantile_points:
-        #  Have not figured out a faster way to do this than a loop. Each level has an independent interpolation
-        for i in range(nlevels):
-            aggs[idx_quantile, i] = calculators.weighted_quantiles(branch_rates[i, :], weights, quantile_points)
+        aggs[idx_quantile, :] = calculators.weighted_quantiles(branch_rates, weights, quantile_points)
 
     if idx_mean is not None:
         aggs[idx_mean, :] = mean
