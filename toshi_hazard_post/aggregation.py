@@ -13,6 +13,7 @@ import numpy as np
 import pyarrow.orc as orc
 from nzshm_common.location.coded_location import bin_locations
 
+import toshi_hazard_post.calculators as calculators
 import toshi_hazard_post.constants as constants
 from toshi_hazard_post.aggregation_args import AggregationArgs
 from toshi_hazard_post.aggregation_calc import AggSharedArgs, AggTaskArgs, calc_aggregation
@@ -147,6 +148,8 @@ def run_aggregation(args: AggregationArgs, pool_executor: Executor | None = None
 
     futures = {}
     # ds1 = get_realizations_dataset()
+    # compile before the workers are started so that they do not each compile for their first task
+    calculators.warm_up()
     pool_executor = pool_executor or ProcessPoolExecutor(max_workers=NUM_WORKERS)
     with pool_executor as executor:
         for vs30, location, imt, filepath in _generate_agg_jobs(

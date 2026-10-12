@@ -12,6 +12,14 @@
   (location, imt) task (~0.41 s to ~0.10 s) and removes ~660 MB of transient memory per worker. Mean, std and cov
   change by floating point rounding only (up to 7e-15 relative).
   ([#95](https://github.com/GNS-Science/toshi-hazard-post/issues/95))
+- The weighted quantiles are calculated in a numba kernel that puts the values of a level in bins and sorts only
+  the values near each quantile, instead of sorting every composite branch of every level. The quantile definition
+  is unchanged, including the order of equal values. For NSHM_v1.0.4 this is about 21x faster per (location, imt)
+  task (~4.6 s to ~0.22 s for 8 quantiles). Quantiles change by floating point rounding only (up to 6e-11 relative),
+  because the cumulative weights are summed in a different order.
+  ([#94](https://github.com/GNS-Science/toshi-hazard-post/issues/94))
+- `calculators.weighted_quantiles` takes values with shape (IMTL, branch) and returns the quantiles of every level
+  with shape (quantile, IMTL), rather than taking the values of a single level.
 - `calculators.weighted_avg_and_std` takes values with shape (IMTL, branch) rather than (branch, IMTL).
 - `aggregation_calc.calculate_aggs` takes composite rates with shape (IMTL, branch) rather than (branch, IMTL).
 - The error raised when a job's realizations do not match the component branches reports counts and the first few
