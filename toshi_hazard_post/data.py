@@ -1,10 +1,12 @@
 """Functions for loading realizations and saving aggregations."""
 
+import itertools
 import logging
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import numpy as np
 import pyarrow as pa
 import pyarrow.compute as pc
 import pyarrow.dataset as ds
@@ -62,14 +64,55 @@ def get_batch_table(
     if 'nloc_0' in dataset_columns:
         flt = flt & (pc.field('nloc_0') == pc.scalar(nloc_0))
 
-    batch_datatable = dataset.to_table(columns=columns, filter=flt)
+    # the table is read in thousands of chunks, and taking the rows of a job from a chunked table is slow
+    batch_datatable = dataset.to_table(columns=columns, filter=flt).combine_chunks()
     t1 = time.perf_counter()
     log.debug("time to create batch table: %0.1f seconds" % (t1 - t0))
     return batch_datatable
 
 
+def _string_ids(column: pa.ChunkedArray) -> tuple['npt.NDArray', list[str]]:
+    """Give each string of a column an integer id, and get the string of each id."""
+    # chunks of a dictionary encoded column can each have their own dictionary, so encode the strings again
+    if pa.types.is_dictionary(column.type):
+        column = column.cast(pa.string())
+    encoded = column.combine_chunks().dictionary_encode()
+    return encoded.indices.to_numpy(), encoded.dictionary.to_pylist()
+
+
+def group_batch_rows(batch_datatable: pa.Table) -> dict[tuple[str, str], 'npt.NDArray']:
+    """Find the rows of the batch datatable for each aggregation job (one IMT and location).
+
+    The whole table is grouped in one pass, so that the table of each job can be taken from it without
+    searching the table again.
+
+    Args:
+        batch_datatable: the datatable produced by get_batch_table.
+
+    Returns:
+        The row indices of each (location code at 0.001 degree resolution, intensity measure type), in the
+            order the rows have in the table.
+    """
+    if len(batch_datatable) == 0:
+        return {}
+    location_ids, locations = _string_ids(batch_datatable['nloc_001'])
+    imt_ids, imts = _string_ids(batch_datatable['imt'])
+    job_ids = location_ids.astype(np.int64) * len(imts) + imt_ids
+
+    # a stable sort puts the rows of each job together and leaves them in table order
+    order = np.argsort(job_ids, kind='stable')
+    sorted_job_ids = job_ids[order]
+    starts = np.concatenate(([0], np.flatnonzero(np.diff(sorted_job_ids)) + 1, [len(order)]))
+    job_rows = {}
+    for start, end in itertools.pairwise(starts):
+        location_id, imt_id = divmod(int(sorted_job_ids[start]), len(imts))
+        job_rows[(locations[location_id], imts[imt_id])] = order[start:end]
+    return job_rows
+
+
 def get_job_datatable(
     batch_datatable: pa.Table,
+    job_rows: dict[tuple[str, str], 'npt.NDArray'],
     location: 'CodedLocation',
     imt: str,
     n_expected: int,
@@ -80,32 +123,38 @@ def get_job_datatable(
     filters on the dataset for vs30, nloc_0, etc.
 
     Args:
-        batch_datatable: the pre-filtered datatable to be further filtered for a specific aggregation job.
+        batch_datatable: the pre-filtered datatable to take the rows of a specific aggregation job from.
+        job_rows: the rows of batch_datatable for each job, produced by group_batch_rows.
         location: the location of the site.
         imt: the intensity measure type.
         n_expected: the number of records expected (typically the number of branches).
 
     Returns:
-        The filtered data table.
+        The data table of the job, with the digests as strings.
+
+    Raises:
+        KeyError: if the batch datatable does not have n_expected records for the job.
     """
     t0 = time.perf_counter()
-    table = batch_datatable.filter((pc.field("imt") == imt) & (pc.field("nloc_001") == location.downsample(0.001).code))
-    table = pa.table(
-        {
-            "sources_digest": table['sources_digest'].to_pylist(),
-            "gmms_digest": table['gmms_digest'].to_pylist(),
-            "values": table['values'],
-        }
-    )
-
-    if len(table) == 0:
+    rows = job_rows.get((location.downsample(0.001).code, imt))
+    if rows is None:
         raise KeyError(f"no records found for location: {location}, imt: {imt}")
-    if len(table) != n_expected:
+    if len(rows) != n_expected:
         msg = (
             f"incorrect number of records found for location: "
-            f"{location}, imt: {imt}. Expected {n_expected}, got {len(table)}"
+            f"{location}, imt: {imt}. Expected {n_expected}, got {len(rows)}"
         )
         raise KeyError(msg)
+
+    job_table = batch_datatable.select(['sources_digest', 'gmms_digest', 'values']).take(rows)
+    # the workers need the digests as strings, not as dictionary encoded strings
+    table = pa.table(
+        {
+            "sources_digest": job_table['sources_digest'].cast(pa.string()),
+            "gmms_digest": job_table['gmms_digest'].cast(pa.string()),
+            "values": job_table['values'],
+        }
+    )
 
     t1 = time.perf_counter()
     log.debug("time to create job table: %0.5f seconds" % (t1 - t0))
