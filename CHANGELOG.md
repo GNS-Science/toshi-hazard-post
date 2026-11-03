@@ -18,6 +18,12 @@
   task (~4.6 s to ~0.22 s for 8 quantiles). Quantiles change by floating point rounding only (up to 6e-11 relative),
   because the cumulative weights are summed in a different order.
   ([#94](https://github.com/GNS-Science/toshi-hazard-post/issues/94))
+- The realization table of each (location, imt) job is taken from the batch table using row indices found by
+  grouping the batch once, instead of filtering the whole batch table for every job. For a batch of 59 locations
+  and 16 imts of NSHM_v1.0.4 (944 jobs) the parent process prepares the jobs about 17x faster (~111 s to ~6.4 s,
+  8.5 to 148 jobs per second). The job files are unchanged.
+  ([#96](https://github.com/GNS-Science/toshi-hazard-post/issues/96))
+- `data.get_job_datatable` takes the rows of each job, from the new `data.group_batch_rows`, as its second argument.
 - `calculators.weighted_quantiles` takes values with shape (IMTL, branch) and returns the quantiles of every level
   with shape (quantile, IMTL), rather than taking the values of a single level.
 - `calculators.weighted_avg_and_std` takes values with shape (IMTL, branch) rather than (branch, IMTL).

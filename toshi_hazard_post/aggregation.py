@@ -18,7 +18,7 @@ import toshi_hazard_post.constants as constants
 from toshi_hazard_post.aggregation_args import AggregationArgs
 from toshi_hazard_post.aggregation_calc import AggSharedArgs, AggTaskArgs, calc_aggregation
 from toshi_hazard_post.aggregation_setup import Site, get_logic_trees, get_sites
-from toshi_hazard_post.data import get_batch_table, get_job_datatable, get_realizations_dataset
+from toshi_hazard_post.data import get_batch_table, get_job_datatable, get_realizations_dataset, group_batch_rows
 from toshi_hazard_post.local_config import NUM_WORKERS, WORKING_DIR
 from toshi_hazard_post.logic_tree import HazardLogicTree, build_branch_index_table
 
@@ -58,8 +58,9 @@ def _generate_agg_jobs(
             batch_datatable = get_batch_table(
                 dataset, compatibility_key, sources_digests, gmms_digests, vs30, nloc_0, imts
             )
+            job_rows = group_batch_rows(batch_datatable)
             for location, imt in itertools.product(location_bin.locations, imts):
-                job_datatable = get_job_datatable(batch_datatable, location, imt, n_expected)
+                job_datatable = get_job_datatable(batch_datatable, job_rows, location, imt, n_expected)
                 filepath = Path(WORKING_DIR) / f"{vs30}_{nloc_0}_{location.downsample(0.001).code}_{imt}_dataset.dat"
                 log.debug("writing file %s for agg job %s, %s", filepath, location.code, imt)
                 t0 = time.perf_counter()
