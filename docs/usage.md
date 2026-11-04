@@ -6,7 +6,7 @@ toshi-hazard-post requires some configuration to run. This can either be done vi
 
 - `'THP_{RLZ|AGG}_DIR'`: The path to the {realization or aggregate} datastore. Can be a local filepath or S3 URI.
 - `'THP_NUM_WORKERS'`: Number of parallel processes to run (default: 1).
-- `'THP_NUM_LOAD_THREADS'`: Number of realization batches (one vs30 and 1 degree location bin each) the main process loads at once, in threads, ahead of the workers (default: 4). Each batch takes about 1-2 GB of memory in the main process while it is loaded or being used. Use 1 to load one batch at a time, or more to keep a large number of workers busy when reading from S3.
+- `'THP_NUM_LOAD_THREADS'`: Number of realization batches (one vs30 and 1 degree location bin each) the main process loads at once, in threads, ahead of the workers (default: 1, one batch at a time). Each batch takes about 1-2 GB of memory in the main process while it is loaded or being used. More than 1 may help keep a large number of workers busy when reading from S3; with fewer than ~30 workers the workers, not loading, limit the run.
 - `'THP_DELAY_MULTIPLIER'`: multiplier to apply to the delay of parallel workers. Parallel jobs are delayed by multiplier * mod(job_number, 10) to avoid too many simultaneous reads from the realization dataset.
 
 When reading from S3 on a machine that is not an AWS EC2 instance, setting `AWS_EC2_METADATA_DISABLED=true` avoids a delay of several seconds at start-up while the AWS SDK looks for EC2 instance credentials.

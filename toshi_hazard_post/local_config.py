@@ -6,7 +6,7 @@ precedence over values in the file file. The default the file location is ./.env
 Args:
     THP_NUM_WORKERS: number of parallel processes. if == 1, will run without spawning new processes.
     THP_NUM_LOAD_THREADS: number of realization batches (one vs30 and 1 degree location bin each) to load at once,
-        in threads of the main process. Each batch being loaded or used takes about 1-2 GB.
+        in threads of the main process (default 1). Each batch being loaded or used takes about 1-2 GB.
     THP_{RLZ|AGG}_DIR: the path to the {realization or aggregate} datastore. Can be a local filepath or s3 bucket.
 """
 
@@ -24,7 +24,7 @@ if os.name == 'nt':
     os.environ['TZDIR'] = str(tzdata_dir)
 
 DEFAULT_NUM_WORKERS = 1
-DEFAULT_NUM_LOAD_THREADS = 4
+DEFAULT_NUM_LOAD_THREADS = 1
 DEFAULT_FS = 'LOCAL'
 
 

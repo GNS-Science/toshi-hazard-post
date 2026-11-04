@@ -14,7 +14,7 @@ def reload_config(monkeypatch):
 
 def test_num_load_threads_default(monkeypatch, reload_config):
     monkeypatch.delenv('THP_NUM_LOAD_THREADS', raising=False)
-    assert reload_config().NUM_LOAD_THREADS == 4
+    assert reload_config().NUM_LOAD_THREADS == 1
 
 
 def test_num_load_threads_from_env(monkeypatch, reload_config):
