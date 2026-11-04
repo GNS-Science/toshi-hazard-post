@@ -217,57 +217,6 @@ def get_job_probs(
     return values.flatten().to_numpy().reshape(n_components, -1)
 
 
-def get_job_datatable(
-    batch_datatable: pa.Table,
-    job_rows: dict[tuple[str, str], 'npt.NDArray'],
-    location: 'CodedLocation',
-    imt: str,
-    n_expected: int,
-) -> pa.Table:
-    """Get the realization datatable for a specific aggregation job (one IMT, location, etc.).
-
-    The batch_datatable is expected to be produced by get_batch_table which will have applied broader
-    filters on the dataset for vs30, nloc_0, etc.
-
-    Args:
-        batch_datatable: the pre-filtered datatable to take the rows of a specific aggregation job from.
-        job_rows: the rows of batch_datatable for each job, produced by group_batch_rows.
-        location: the location of the site.
-        imt: the intensity measure type.
-        n_expected: the number of records expected (typically the number of branches).
-
-    Returns:
-        The data table of the job, with the digests as strings.
-
-    Raises:
-        KeyError: if the batch datatable does not have n_expected records for the job.
-    """
-    t0 = time.perf_counter()
-    rows = job_rows.get((location.downsample(0.001).code, imt))
-    if rows is None:
-        raise KeyError(f"no records found for location: {location}, imt: {imt}")
-    if len(rows) != n_expected:
-        msg = (
-            f"incorrect number of records found for location: "
-            f"{location}, imt: {imt}. Expected {n_expected}, got {len(rows)}"
-        )
-        raise KeyError(msg)
-
-    job_table = batch_datatable.select(['sources_digest', 'gmms_digest', 'values']).take(rows)
-    # the workers need the digests as strings, not as dictionary encoded strings
-    table = pa.table(
-        {
-            "sources_digest": job_table['sources_digest'].cast(pa.string()),
-            "gmms_digest": job_table['gmms_digest'].cast(pa.string()),
-            "values": job_table['values'],
-        }
-    )
-
-    t1 = time.perf_counter()
-    log.debug("time to create job table: %0.5f seconds" % (t1 - t0))
-    return table
-
-
 def save_aggregations(
     hazard: 'npt.NDArray',
     location: 'CodedLocation',

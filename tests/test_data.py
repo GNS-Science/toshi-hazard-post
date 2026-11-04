@@ -15,7 +15,6 @@ from toshi_hazard_post.aggregation_setup import get_logic_trees
 from toshi_hazard_post.data import (
     component_row_ids,
     get_batch_table,
-    get_job_datatable,
     get_job_probs,
     get_realizations_dataset,
     group_batch_rows,
@@ -51,14 +50,24 @@ def test_table_without_partition(patch_rlz):
     """We can retrieve a dataset without using the partitioning and filter on vs30 and nloc_0."""
     dataset = get_realizations_dataset()
     batch_table = get_batch_table(dataset, compatibility_key, sources_digests, gmms_digests, vs30, nloc_0, imts)
-    get_job_datatable(batch_table, group_batch_rows(batch_table), location, imts[0], n_expected)
+    component_digests = logic_tree.component_digests
+    component_ids = component_row_ids(batch_table, component_digests)
+    probs = get_job_probs(
+        batch_table, group_batch_rows(batch_table), component_ids, component_digests, location, imts[0]
+    )
+    assert probs.shape[0] == n_expected
 
 
 def test_table_with_partition(patch_rlz):
     """We can retrieve a dataset using the partitioning no need to filter on vs30 and nloc_0."""
     dataset = get_realizations_dataset(vs30, nloc_0)
     batch_table = get_batch_table(dataset, compatibility_key, sources_digests, gmms_digests, vs30, nloc_0, imts)
-    get_job_datatable(batch_table, group_batch_rows(batch_table), location, imts[0], n_expected)
+    component_digests = logic_tree.component_digests
+    component_ids = component_row_ids(batch_table, component_digests)
+    probs = get_job_probs(
+        batch_table, group_batch_rows(batch_table), component_ids, component_digests, location, imts[0]
+    )
+    assert probs.shape[0] == n_expected
 
 
 LOCATIONS = [
@@ -111,42 +120,6 @@ def test_group_batch_rows(batch_table):
 
 def test_group_batch_rows_of_empty_table(batch_table):
     assert group_batch_rows(batch_table.slice(0, 0)) == {}
-
-
-@pytest.mark.parametrize("location", LOCATIONS)
-@pytest.mark.parametrize("imt", IMTS)
-def test_job_datatable_is_the_rows_of_the_job(batch_table, location, imt):
-    job_table = get_job_datatable(batch_table, group_batch_rows(batch_table), location, imt, N_BRANCHES)
-
-    # the workers add the digest columns together, which needs strings rather than dictionary encoded strings
-    assert job_table.schema.names == ['sources_digest', 'gmms_digest', 'values']
-    assert job_table.schema.field('sources_digest').type == pa.string()
-    assert job_table.schema.field('gmms_digest').type == pa.string()
-    expected = batch_table.filter((pc.field('imt') == imt) & (pc.field('nloc_001') == location.code))
-    assert job_table['sources_digest'].to_pylist() == expected['sources_digest'].cast(pa.string()).to_pylist()
-    assert job_table['gmms_digest'].to_pylist() == expected['gmms_digest'].cast(pa.string()).to_pylist()
-    assert job_table['values'].to_pylist() == expected['values'].to_pylist()
-
-
-def test_job_datatable_location_is_downsampled(batch_table):
-    location = CodedLocation(-41.3001, 174.7801, 0.0001)
-    job_table = get_job_datatable(batch_table, group_batch_rows(batch_table), location, "PGA", N_BRANCHES)
-    assert len(job_table) == N_BRANCHES
-
-
-@pytest.mark.parametrize(
-    "location,imt",
-    [(CodedLocation(-45.0, 170.0, 0.001), "PGA"), (LOCATIONS[0], "SA(3.0)")],
-    ids=["location", "imt"],
-)
-def test_job_datatable_no_records(batch_table, location, imt):
-    with pytest.raises(KeyError, match="no records found"):
-        get_job_datatable(batch_table, group_batch_rows(batch_table), location, imt, N_BRANCHES)
-
-
-def test_job_datatable_incorrect_number_of_records(batch_table):
-    with pytest.raises(KeyError, match=f"Expected {N_BRANCHES + 1}, got {N_BRANCHES}"):
-        get_job_datatable(batch_table, group_batch_rows(batch_table), LOCATIONS[0], "PGA", N_BRANCHES + 1)
 
 
 class FakeS3FileSystem:

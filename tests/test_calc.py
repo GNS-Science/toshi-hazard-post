@@ -1,11 +1,12 @@
 from pathlib import Path
 
 import numpy as np
-import pandas as pd
 import pytest
+from nzshm_common.location.coded_location import CodedLocation
 from nzshm_model.logic_tree import GMCMLogicTree, SourceLogicTree
 
 import toshi_hazard_post.aggregation_calc as aggregation_calc
+import toshi_hazard_post.calculators as calculators
 from toshi_hazard_post.logic_tree import HazardLogicTree, build_branch_index_table
 
 # from toshi_hazard_post.data import ValueStore
@@ -123,54 +124,36 @@ def test_agg_types(branch_rates, agg_types):
     assert hazard_agg.shape == (len(agg_types), branch_rates.shape[0])
 
 
-def test_convert_p2r():
-    d = {'values': [np.array([1, 1, 1]), np.array([0, 0, 0])]}
-    df_in = pd.DataFrame(d)
-    df_out = aggregation_calc.convert_probs_to_rates(df_in)
+def test_prob_to_rate_whole_array_matches_rows(monkeypatch):
+    """Converting a job's probabilities at once gives exactly what converting them row by row did."""
+    import toshi_hazard_post.data as data
+    from tests.test_data import compatibility_key, gmms_digests, imts, location, logic_tree, nloc_0, sources_digests
+    from tests.test_data import vs30 as fixture_vs30
 
-    assert all(df_out.columns == ['rates'])
-    assert all(df_out.loc[0]['rates'] == [np.inf, np.inf, np.inf])
-    assert all(df_out.loc[1]['rates'] == [0, 0, 0])
+    monkeypatch.setattr(data, 'RLZ_DIR', str(Path(__file__).parent / 'fixtures/end_to_end/rlz'))
+    batch = data.get_batch_table(
+        data.get_realizations_dataset(fixture_vs30, nloc_0),
+        compatibility_key,
+        sources_digests,
+        gmms_digests,
+        fixture_vs30,
+        nloc_0,
+        imts,
+    )
+    digests = logic_tree.component_digests
+    ids = data.component_row_ids(batch, digests)
+    probs = data.get_job_probs(batch, data.group_batch_rows(batch), ids, digests, location, imts[0])
 
-
-def test_component_array():
-    d = {
-        'sources_digest': ['def', 'abc', 'ghi'],
-        'gmms_digest': ['456', '123', '789'],
-        'rates': [np.array([2.0, 20.0]), np.array([1.0, 10.0]), np.array([3.0, 30.0])],
-    }
-    df = pd.DataFrame(d)
-
-    component_array = aggregation_calc.create_component_array(df, ['abc123', 'def456', 'ghi789'])
-
-    assert component_array.tolist() == [[1.0, 10.0], [2.0, 20.0], [3.0, 30.0]]
-
-
-@pytest.mark.parametrize(
-    "component_digests,message",
-    [
-        (['abc123', 'def456', 'xyz000'], r"1 component branches have no rates \(first \['xyz000'\]\), 0 rates are"),
-        (['abc123'], r"0 component branches have no rates \(first \[\]\), 1 rates are"),
-        # the right number of rows, but for the wrong branches
-        (['abc123', 'xyz000'], r"1 component branches have no rates \(first \['xyz000'\]\), 1 rates are"),
-    ],
-)
-def test_component_array_digest_mismatch(component_digests, message):
-    d = {
-        'sources_digest': ['def', 'abc'],
-        'gmms_digest': ['456', '123'],
-        'rates': [np.array([2.0, 20.0]), np.array([1.0, 10.0])],
-    }
-    df = pd.DataFrame(d)
-
-    with pytest.raises(KeyError, match=message):
-        aggregation_calc.create_component_array(df, component_digests)
+    whole = calculators.prob_to_rate(probs, 1.0)
+    rows = np.stack([calculators.prob_to_rate(row, 1.0) for row in probs])
+    assert whole.dtype == rows.dtype
+    assert np.array_equal(whole, rows)
 
 
-def test_component_array_digest_mismatch_message_is_short():
-    df = pd.DataFrame({'sources_digest': ['abc'], 'gmms_digest': ['123'], 'rates': [np.array([1.0])]})
-    component_digests = [f"missing{i}" for i in range(1000)]
-
-    with pytest.raises(KeyError) as excinfo:
-        aggregation_calc.create_component_array(df, component_digests)
-    assert len(str(excinfo.value)) < 500
+def test_task_args_repr_leaves_out_probs():
+    args = aggregation_calc.AggTaskArgs(
+        location=CodedLocation(-41.3, 174.78, 0.001), vs30=400, imt="PGA", probs=np.zeros((912, 44), np.float32)
+    )
+    text = repr(args)
+    assert "(912, 44)" in text and "float32" in text and "-41.300~174.780" in text
+    assert len(text) < 200

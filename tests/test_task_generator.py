@@ -1,12 +1,15 @@
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from itertools import product
 
+import numpy as np
 import pytest
 from nzshm_common.location.coded_location import CodedLocation
 
 import toshi_hazard_post.aggregation as aggregation
-from toshi_hazard_post.aggregation import _generate_agg_jobs, _prefetch
+from toshi_hazard_post.aggregation import _generate_agg_jobs, _prefetch, _run_tasks
+from toshi_hazard_post.aggregation_calc import AggSharedArgs, AggTaskArgs
 from toshi_hazard_post.aggregation_setup import Site
 
 
@@ -96,28 +99,23 @@ def test_prefetch_stops_early_without_waiting_for_pending_loads():
     assert len(started) < 10
 
 
-def test_generate_agg_jobs_order_is_the_same_for_any_threads(monkeypatch, tmp_path):
+def test_generate_agg_jobs_order_is_the_same_for_any_threads(monkeypatch):
     """Jobs come out in bin order even when later bins finish loading first."""
     lat_lons = [(-41.2, 174.8), (-41.3, 174.7), (-36.9, 174.8), (-45.9, 170.5)]  # 3 bins
     sites = [Site(CodedLocation(*ll, 0.001), vs30) for ll, vs30 in product(lat_lons, [275, 400])]
     imts = ["PGA", "SA(1.0)"]
     bins = []
 
-    def fake_load_batch(vs30, nloc_0, compatibility_key, sources_digests, gmms_digests, imts):
+    def fake_load_batch(vs30, nloc_0, compatibility_key, sources_digests, gmms_digests, imts, component_digests):
         bins.append((vs30, nloc_0))
         time.sleep(0.05 / len(bins))  # later loads finish sooner
-        return (vs30, nloc_0), {}
-
-    def fake_job_datatable(batch_datatable, job_rows, location, imt, n_expected):
-        return batch_datatable
+        return (vs30, nloc_0), {}, None
 
     monkeypatch.setattr(aggregation, '_load_batch', fake_load_batch)
-    monkeypatch.setattr(aggregation, 'get_job_datatable', fake_job_datatable)
-    monkeypatch.setattr(aggregation.orc, 'write_table', lambda table, filepath, compression: None)
-    monkeypatch.setattr(aggregation, 'WORKING_DIR', str(tmp_path))
+    monkeypatch.setattr(aggregation, 'get_job_probs', lambda *args: np.zeros((1, 1)))
 
     def jobs(k: int) -> list[tuple[int, str, str]]:
-        return [(vs30, loc.code, imt) for vs30, loc, imt, *_ in _generate_agg_jobs(sites, imts, "key", [], k)]
+        return [(t.vs30, t.location.code, t.imt) for t in _generate_agg_jobs(sites, imts, "key", [], k)]
 
     serial = jobs(1)
     assert len(serial) == len(sites) * len(imts)
@@ -125,21 +123,19 @@ def test_generate_agg_jobs_order_is_the_same_for_any_threads(monkeypatch, tmp_pa
 
 
 @pytest.mark.parametrize("k", [1, 2])
-def test_generate_agg_jobs_holds_at_most_k_batches(monkeypatch, tmp_path, k):
+def test_generate_agg_jobs_holds_at_most_k_batches(monkeypatch, k):
     lat_lons = [(-41.2, 174.8), (-36.9, 174.8), (-45.9, 170.5), (-39.0, 176.0), (-44.0, 172.0)]  # 5 bins
     sites = [Site(CodedLocation(*ll, 0.001), 275) for ll in lat_lons]
 
     live_when_loaded = []
 
-    def fake_load_batch(vs30, nloc_0, compatibility_key, sources_digests, gmms_digests, imts):
+    def fake_load_batch(vs30, nloc_0, compatibility_key, sources_digests, gmms_digests, imts, component_digests):
         table = Tracked()
         live_when_loaded.append(Tracked.live)
-        return table, {}
+        return table, {}, None
 
     monkeypatch.setattr(aggregation, '_load_batch', fake_load_batch)
-    monkeypatch.setattr(aggregation, 'get_job_datatable', lambda *args: None)
-    monkeypatch.setattr(aggregation.orc, 'write_table', lambda table, filepath, compression: None)
-    monkeypatch.setattr(aggregation, 'WORKING_DIR', str(tmp_path))
+    monkeypatch.setattr(aggregation, 'get_job_probs', lambda *args: np.zeros((1, 1)))
 
     Tracked.live = 0
     seen = []
@@ -149,3 +145,58 @@ def test_generate_agg_jobs_holds_at_most_k_batches(monkeypatch, tmp_path, k):
     assert len(seen) == 5
     assert max(seen) <= k
     assert max(live_when_loaded) <= k
+
+
+def shared_args() -> AggSharedArgs:
+    return AggSharedArgs(
+        agg_types=["mean"],
+        compatibility_key="key",
+        hazard_model_id="model",
+        weights_shape=(1,),
+        branch_index_table_shape=(1, 1),
+        branch_index_table_dtype="<u2",
+        skip_save=True,
+    )
+
+
+def task(i: int) -> AggTaskArgs:
+    return AggTaskArgs(location=CodedLocation(-41.0, 175.0, 0.001), vs30=i, imt="PGA", probs=np.zeros((912, 44)))
+
+
+def test_run_tasks_caps_tasks_in_flight():
+    lock = threading.Lock()
+    submitted = 0
+    done = 0
+    in_flight = []
+
+    def fn(task_args: AggTaskArgs, shared: AggSharedArgs) -> None:
+        nonlocal done
+        time.sleep(0.005)
+        with lock:
+            done += 1
+
+    def tasks():
+        nonlocal submitted
+        for i in range(100):
+            with lock:
+                in_flight.append(submitted - done)
+            submitted += 1
+            yield task(i)
+
+    with ThreadPoolExecutor(4) as executor:
+        result = _run_tasks(executor, fn, tasks(), shared_args(), max_in_flight=6)
+    assert result == (100, 0)
+    assert max(in_flight) <= 6
+
+
+def test_run_tasks_counts_and_logs_failures(caplog):
+    def fn(task_args: AggTaskArgs, shared: AggSharedArgs) -> None:
+        if task_args.vs30 % 4 == 1:
+            raise ValueError("bad task")
+
+    with ThreadPoolExecutor(2) as executor:
+        result = _run_tasks(executor, fn, (task(i) for i in range(10)), shared_args(), max_in_flight=4)
+    assert result == (10, 3)
+    errors = [record for record in caplog.records if "Exception encountered" in record.getMessage()]
+    assert len(errors) == 3
+    assert all(len(record.getMessage()) < 500 for record in errors)
