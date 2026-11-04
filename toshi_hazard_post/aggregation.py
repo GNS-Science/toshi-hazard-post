@@ -3,13 +3,15 @@
 import itertools
 import logging
 import time
-from collections.abc import Generator
-from concurrent.futures import Executor, ProcessPoolExecutor, as_completed
+from collections import deque
+from collections.abc import Callable, Generator, Iterable
+from concurrent.futures import Executor, ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 from multiprocessing import shared_memory
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypeVar
 
 import numpy as np
+import pyarrow as pa
 import pyarrow.orc as orc
 from nzshm_common.location.coded_location import bin_locations
 
@@ -19,7 +21,7 @@ from toshi_hazard_post.aggregation_args import AggregationArgs
 from toshi_hazard_post.aggregation_calc import AggSharedArgs, AggTaskArgs, calc_aggregation
 from toshi_hazard_post.aggregation_setup import Site, get_logic_trees, get_sites
 from toshi_hazard_post.data import get_batch_table, get_job_datatable, get_realizations_dataset, group_batch_rows
-from toshi_hazard_post.local_config import NUM_WORKERS, WORKING_DIR
+from toshi_hazard_post.local_config import NUM_LOAD_THREADS, NUM_WORKERS, WORKING_DIR
 from toshi_hazard_post.logic_tree import HazardLogicTree, build_branch_index_table
 
 if TYPE_CHECKING:
@@ -33,12 +35,54 @@ log = logging.getLogger(__name__)
 
 PARTITION_RESOLUTION = 1.0
 
+T = TypeVar('T')
+R = TypeVar('R')
+
+
+def _prefetch(load: Callable[[T], R], items: Iterable[T], n: int) -> Generator[R, None, None]:
+    """Yield load(item) for each item, in order, running up to n loads ahead in threads.
+
+    At most n results are held at once, counting the one last yielded, provided the caller drops its reference
+    to each result before asking for the next.
+    """
+    it = iter(items)
+    executor = ThreadPoolExecutor(max_workers=n)
+    pending = deque(executor.submit(load, item) for item in itertools.islice(it, n))
+    try:
+        while pending:
+            result = pending.popleft().result()
+            yield result
+            del result
+            pending.extend(executor.submit(load, item) for item in itertools.islice(it, 1))
+    finally:
+        # don't wait for loads still running if the run has failed or stopped early
+        executor.shutdown(wait=False, cancel_futures=True)
+
+
+def _load_batch(
+    vs30: int,
+    nloc_0: str,
+    compatibility_key: str,
+    sources_digests: list[str],
+    gmms_digests: list[str],
+    imts: list[str],
+) -> tuple[pa.Table, dict[tuple[str, str], 'npt.NDArray']]:
+    """Load the realizations of one vs30 and 1 degree location bin, and find the rows of each job."""
+    log.debug("loading batch %d, %s", vs30, nloc_0)
+    t0 = time.perf_counter()
+    dataset = get_realizations_dataset(vs30, nloc_0)
+    batch_datatable = get_batch_table(dataset, compatibility_key, sources_digests, gmms_digests, vs30, nloc_0, imts)
+    job_rows = group_batch_rows(batch_datatable)
+    log.debug("loaded batch %d, %s in %0.1f seconds", vs30, nloc_0, time.perf_counter() - t0)
+    return batch_datatable, job_rows
+
 
 def _generate_agg_jobs(
     sites: list[Site],
     imts: list[str],
     compatibility_key: str,
     component_branches: list['HazardComponentBranch'],
+    n_load_threads: int,
 ) -> Generator[tuple[int, 'CodedLocation', str, Path], None, None]:
 
     gmms_digests = [branch.gmcm_hash_digest for branch in component_branches]
@@ -49,25 +93,36 @@ def _generate_agg_jobs(
     vs30s_unique = set([site.vs30 for site in sites])
 
     log.info("creating batches from %d sites and %d vs30s", len(sites), len(vs30s_unique))
+    batches = []
     for vs30 in vs30s_unique:
         locations = [site.location for site in sites if site.vs30 == vs30]
         location_bins = bin_locations(locations, PARTITION_RESOLUTION)
-        for nloc_0, location_bin in location_bins.items():
-            dataset = get_realizations_dataset(vs30, nloc_0)
-            log.info("batch %d, %s", vs30, nloc_0)
-            batch_datatable = get_batch_table(
-                dataset, compatibility_key, sources_digests, gmms_digests, vs30, nloc_0, imts
-            )
-            job_rows = group_batch_rows(batch_datatable)
-            for location, imt in itertools.product(location_bin.locations, imts):
-                job_datatable = get_job_datatable(batch_datatable, job_rows, location, imt, n_expected)
-                filepath = Path(WORKING_DIR) / f"{vs30}_{nloc_0}_{location.downsample(0.001).code}_{imt}_dataset.dat"
-                log.debug("writing file %s for agg job %s, %s", filepath, location.code, imt)
-                t0 = time.perf_counter()
-                orc.write_table(job_datatable, filepath, compression='snappy')
-                t1 = time.perf_counter()
-                log.debug("time to write data: %0.5f seconds" % (t1 - t0))
-                yield vs30, location, imt, filepath
+        batches += [(vs30, nloc_0, location_bin) for nloc_0, location_bin in location_bins.items()]
+
+    def load(batch):
+        vs30, nloc_0, location_bin = batch
+        return (
+            vs30,
+            nloc_0,
+            location_bin,
+            *_load_batch(vs30, nloc_0, compatibility_key, sources_digests, gmms_digests, imts),
+        )
+
+    # each batch comes with its tables, rather than zipping batches with the tables, because zip would hold
+    # on to the previous tables while the next load starts
+    for vs30, nloc_0, location_bin, batch_datatable, job_rows in _prefetch(load, batches, n_load_threads):
+        log.info("batch %d, %s", vs30, nloc_0)
+        for location, imt in itertools.product(location_bin.locations, imts):
+            job_datatable = get_job_datatable(batch_datatable, job_rows, location, imt, n_expected)
+            filepath = Path(WORKING_DIR) / f"{vs30}_{nloc_0}_{location.downsample(0.001).code}_{imt}_dataset.dat"
+            log.debug("writing file %s for agg job %s, %s", filepath, location.code, imt)
+            t0 = time.perf_counter()
+            orc.write_table(job_datatable, filepath, compression='snappy')
+            t1 = time.perf_counter()
+            log.debug("time to write data: %0.5f seconds" % (t1 - t0))
+            yield vs30, location, imt, filepath
+        # drop this batch before the next is requested, so that no more than n_load_threads are held at once
+        del batch_datatable, job_rows
 
 
 def run_aggregation(args: AggregationArgs, pool_executor: Executor | None = None) -> None:
@@ -158,7 +213,7 @@ def run_aggregation(args: AggregationArgs, pool_executor: Executor | None = None
             imts,
             args.general.compatibility_key,
             component_branches,
-            # ds1,
+            NUM_LOAD_THREADS,
         ):
             task_args = AggTaskArgs(
                 location=location,
