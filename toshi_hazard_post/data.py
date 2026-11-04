@@ -1,7 +1,9 @@
 """Functions for loading realizations and saving aggregations."""
 
+import functools
 import itertools
 import logging
+import posixpath
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -10,6 +12,7 @@ import numpy as np
 import pyarrow as pa
 import pyarrow.compute as pc
 import pyarrow.dataset as ds
+import pyarrow.fs as fs
 from toshi_hazard_store.model.hazard_models_pydantic import HazardAggregateCurve
 from toshi_hazard_store.model.pyarrow import pyarrow_aggr_dataset, pyarrow_dataset
 
@@ -20,6 +23,29 @@ log = logging.getLogger(__name__)
 if TYPE_CHECKING:
     import numpy.typing as npt
     from nzshm_common.location.coded_location import CodedLocation
+
+
+@functools.cache
+def _s3_filesystem() -> fs.S3FileSystem:
+    # building an S3FileSystem can take seconds (e.g. when the AWS SDK probes for EC2 instance credentials) and
+    # holds the GIL while it does, so build one per process rather than one per dataset
+    return fs.S3FileSystem(region=pyarrow_dataset.REGION)
+
+
+def resolve_target(target: str) -> tuple[str, fs.FileSystem]:
+    """Get the path and filesystem of a dataset, as toshi-hazard-store's configure_output does.
+
+    Every S3 target shares one S3FileSystem per process.
+
+    Args:
+        target: a local path or an S3 URI.
+
+    Returns:
+        The path within the filesystem, and the filesystem.
+    """
+    if target.startswith('s3://'):
+        return posixpath.normpath(target.removeprefix('s3://')), _s3_filesystem()
+    return str(Path(target).resolve()), fs.LocalFileSystem()
 
 
 def get_batch_table(
@@ -197,7 +223,7 @@ def save_aggregations(
                 values=hazard[i, :],
             )
 
-    agg_dir, filesystem = pyarrow_dataset.configure_output(AGG_DIR)
+    agg_dir, filesystem = resolve_target(str(AGG_DIR))
     partitioning = ['vs30', 'imt', 'nloc_001']
     pyarrow_aggr_dataset.append_models_to_dataset(
         models=generate_models(), base_dir=agg_dir, filesystem=filesystem, partitioning=partitioning
@@ -225,7 +251,7 @@ def get_realizations_dataset(
         rlz_dir_tmp += f"/vs30={vs30}"
         if nloc_0 is not None:
             rlz_dir_tmp += f"/nloc_0={nloc_0}"
-    rlz_dir, filesystem = pyarrow_dataset.configure_output(rlz_dir_tmp)
+    rlz_dir, filesystem = resolve_target(rlz_dir_tmp)
 
     t0 = time.monotonic()
     dataset = ds.dataset(rlz_dir, format='parquet', filesystem=filesystem, partitioning='hive')

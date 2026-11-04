@@ -4,13 +4,21 @@ from pathlib import Path
 import numpy as np
 import pyarrow as pa
 import pyarrow.compute as pc
+import pyarrow.fs
 import pytest
 from nzshm_common.location import get_locations
 from nzshm_common.location.coded_location import CodedLocation
+from toshi_hazard_store.model.pyarrow import pyarrow_dataset
 
 import toshi_hazard_post.data
 from toshi_hazard_post.aggregation_setup import get_logic_trees
-from toshi_hazard_post.data import get_batch_table, get_job_datatable, get_realizations_dataset, group_batch_rows
+from toshi_hazard_post.data import (
+    get_batch_table,
+    get_job_datatable,
+    get_realizations_dataset,
+    group_batch_rows,
+    resolve_target,
+)
 from toshi_hazard_post.logic_tree import HazardLogicTree
 
 compatibility_key = "NZSHM22"
@@ -137,3 +145,41 @@ def test_job_datatable_no_records(batch_table, location, imt):
 def test_job_datatable_incorrect_number_of_records(batch_table):
     with pytest.raises(KeyError, match=f"Expected {N_BRANCHES + 1}, got {N_BRANCHES}"):
         get_job_datatable(batch_table, group_batch_rows(batch_table), LOCATIONS[0], "PGA", N_BRANCHES + 1)
+
+
+class FakeS3FileSystem:
+    constructions = 0
+
+    def __init__(self, **kwargs):
+        FakeS3FileSystem.constructions += 1
+
+
+@pytest.fixture
+def fake_s3(monkeypatch):
+    # toshi-hazard-store and toshi_hazard_post.data use the same pyarrow.fs module
+    monkeypatch.setattr(pyarrow.fs, 'S3FileSystem', FakeS3FileSystem)
+    FakeS3FileSystem.constructions = 0
+    toshi_hazard_post.data._s3_filesystem.cache_clear()
+    yield
+    toshi_hazard_post.data._s3_filesystem.cache_clear()
+
+
+def test_s3_filesystem_is_built_once(fake_s3):
+    _, fs1 = resolve_target("s3://bucket/rlz/vs30=400/nloc_0=-39.0~174.0")
+    _, fs2 = resolve_target("s3://bucket/rlz/vs30=400/nloc_0=-39.0~174.0")
+    _, fs3 = resolve_target("s3://bucket/agg")
+    assert FakeS3FileSystem.constructions == 1
+    assert fs1 is fs2 is fs3
+
+
+@pytest.mark.parametrize(
+    "target", ["s3://bucket/rlz/vs30=400/nloc_0=-39.0~174.0", "s3://bucket/rlz//vs30=400", "s3://bucket/rlz/"]
+)
+def test_s3_target_path_matches_configure_output(fake_s3, target):
+    assert resolve_target(target)[0] == pyarrow_dataset.configure_output(target)[0]
+
+
+def test_local_target(tmp_path):
+    path, filesystem = resolve_target(str(tmp_path / "x"))
+    assert path == str((tmp_path / "x").resolve())
+    assert isinstance(filesystem, pyarrow.fs.LocalFileSystem)
