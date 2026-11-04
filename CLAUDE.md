@@ -37,9 +37,9 @@ A hazard curve is aggregated from pre-computed *realizations* held in an externa
 
 ### Hash digests are the join key
 
-This is the central idea and it spans `logic_tree.py`, `data.py`, and `aggregation_calc.py`. Every branch has a `registry_identity` string; its `identity_digest` is the primary key used to find that branch's realization rows in the dataset. `HazardComponentBranch.hash_digest` is `sources_digest + gmms_digest` concatenated, and the same concatenation is rebuilt from dataset columns in `create_component_array()`. If digests don't line up, nothing matches.
+This is the central idea and it spans `logic_tree.py`, `data.py`, and `aggregation_calc.py`. Every branch has a `registry_identity` string; its `identity_digest` is the primary key used to find that branch's realization rows in the dataset. `HazardComponentBranch.hash_digest` is `sources_digest + gmms_digest` concatenated, and the same concatenation is rebuilt from dataset columns in `data.component_row_ids()`. If digests don't line up, nothing matches.
 
-Digests are *computed*, not looked up: `nzshm_model`'s branch registry is advisory only, so an unregistered branch still gets a valid digest and only warns (`_branch_hash_digest` in `logic_tree.py`, memoised). The practical consequence is that a mistyped toshi id no longer fails fast — it produces a well-formed digest that matches nothing, and the run dies much later in `get_job_datatable` with `incorrect number of records found`. That warning is the clue.
+Digests are *computed*, not looked up: `nzshm_model`'s branch registry is advisory only, so an unregistered branch still gets a valid digest and only warns (`_branch_hash_digest` in `logic_tree.py`, memoised). The practical consequence is that a mistyped toshi id no longer fails fast — it produces a well-formed digest that matches nothing, and the run stops in the parent at its first job, in `data.get_job_probs`, with `incorrect number of records found` or `expected rates for N component branches`. That warning is the clue.
 
 ### Component vs composite branches
 

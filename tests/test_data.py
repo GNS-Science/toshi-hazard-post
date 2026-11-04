@@ -147,6 +147,15 @@ def test_s3_filesystem_is_built_once(fake_s3):
     assert fs1 is fs2 is fs3
 
 
+def test_s3_filesystem_is_not_shared_with_forked_workers(fake_s3, monkeypatch):
+    """A worker forked from the parent builds its own filesystem rather than using the parent's connections."""
+    _, parent_fs = resolve_target("s3://bucket/rlz")
+    monkeypatch.setattr(toshi_hazard_post.data.os, 'getpid', lambda: -1)
+    _, worker_fs = resolve_target("s3://bucket/agg")
+    assert worker_fs is not parent_fs
+    assert FakeS3FileSystem.constructions == 2
+
+
 @pytest.mark.parametrize(
     "target", ["s3://bucket/rlz/vs30=400/nloc_0=-39.0~174.0", "s3://bucket/rlz//vs30=400", "s3://bucket/rlz/"]
 )

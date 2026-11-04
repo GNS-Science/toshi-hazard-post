@@ -3,6 +3,7 @@
 import functools
 import itertools
 import logging
+import os
 import posixpath
 import time
 from collections.abc import Sequence
@@ -27,9 +28,10 @@ if TYPE_CHECKING:
 
 
 @functools.cache
-def _s3_filesystem() -> fs.S3FileSystem:
+def _s3_filesystem(pid: int) -> fs.S3FileSystem:
     # building an S3FileSystem can take seconds (e.g. when the AWS SDK probes for EC2 instance credentials) and
-    # holds the GIL while it does, so build one per process rather than one per dataset
+    # holds the GIL while it does, so build one per process rather than one per dataset. Keyed by process id so
+    # that a worker forked from the parent builds its own rather than using the parent's connections.
     return fs.S3FileSystem(region=pyarrow_dataset.REGION)
 
 
@@ -45,7 +47,7 @@ def resolve_target(target: str) -> tuple[str, fs.FileSystem]:
         The path within the filesystem, and the filesystem.
     """
     if target.startswith('s3://'):
-        return posixpath.normpath(target.removeprefix('s3://')), _s3_filesystem()
+        return posixpath.normpath(target.removeprefix('s3://')), _s3_filesystem(os.getpid())
     return str(Path(target).resolve()), fs.LocalFileSystem()
 
 
