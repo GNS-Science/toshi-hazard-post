@@ -13,8 +13,10 @@ from toshi_hazard_store.model.pyarrow import pyarrow_dataset
 import toshi_hazard_post.data
 from toshi_hazard_post.aggregation_setup import get_logic_trees
 from toshi_hazard_post.data import (
+    component_row_ids,
     get_batch_table,
     get_job_datatable,
+    get_job_probs,
     get_realizations_dataset,
     group_batch_rows,
     resolve_target,
@@ -183,3 +185,108 @@ def test_local_target(tmp_path):
     path, filesystem = resolve_target(str(tmp_path / "x"))
     assert path == str((tmp_path / "x").resolve())
     assert isinstance(filesystem, pyarrow.fs.LocalFileSystem)
+
+
+COMPONENT_DIGESTS = [f"source{branch}gmm{branch}" for branch in range(N_BRANCHES)]
+
+
+def job_probs(batch, location, imt, component_digests=COMPONENT_DIGESTS):
+    component_ids = component_row_ids(batch, component_digests)
+    return get_job_probs(batch, group_batch_rows(batch), component_ids, component_digests, location, imt)
+
+
+def test_component_row_ids(batch_table):
+    component_digests = ["source2gmm2", "source0gmm0", "source1gmm1"]  # source3gmm3 is not a component
+    ids = component_row_ids(batch_table, component_digests)
+
+    sources = batch_table['sources_digest'].cast(pa.string()).to_pylist()
+    gmms = batch_table['gmms_digest'].cast(pa.string()).to_pylist()
+    expected = [
+        component_digests.index(s + g) if s + g in component_digests else -1 for s, g in zip(sources, gmms, strict=True)
+    ]
+    assert ids.tolist() == expected
+
+
+def test_component_row_ids_of_empty_table(batch_table):
+    assert len(component_row_ids(batch_table.slice(0, 0), COMPONENT_DIGESTS)) == 0
+
+
+@pytest.mark.parametrize("location", LOCATIONS)
+@pytest.mark.parametrize("imt", IMTS)
+def test_job_probs_is_the_job_in_component_order(batch_table, location, imt):
+    component_digests = [COMPONENT_DIGESTS[i] for i in [2, 0, 3, 1]]
+    probs = job_probs(batch_table, location, imt, component_digests)
+
+    job = batch_table.filter((pc.field('imt') == imt) & (pc.field('nloc_001') == location.code))
+    by_digest = {
+        s + g: v
+        for s, g, v in zip(
+            job['sources_digest'].cast(pa.string()).to_pylist(),
+            job['gmms_digest'].cast(pa.string()).to_pylist(),
+            job['values'].to_pylist(),
+            strict=True,
+        )
+    }
+    assert probs.dtype == np.float32
+    assert probs.tolist() == [by_digest[digest] for digest in component_digests]
+
+
+def test_job_probs_location_is_downsampled(batch_table):
+    probs = job_probs(batch_table, CodedLocation(-41.3001, 174.7801, 0.0001), "PGA")
+    assert probs.shape == (N_BRANCHES, 3)
+
+
+@pytest.mark.parametrize(
+    "location,imt",
+    [(CodedLocation(-45.0, 170.0, 0.001), "PGA"), (LOCATIONS[0], "SA(3.0)")],
+    ids=["location", "imt"],
+)
+def test_job_probs_no_records(batch_table, location, imt):
+    with pytest.raises(KeyError, match="no records found"):
+        job_probs(batch_table, location, imt)
+
+
+def test_job_probs_incorrect_number_of_records(batch_table):
+    with pytest.raises(KeyError, match=f"Expected {N_BRANCHES + 1}, got {N_BRANCHES}"):
+        job_probs(batch_table, LOCATIONS[0], "PGA", COMPONENT_DIGESTS + ["source9gmm9"])
+
+
+def single_job_table(pairs: list[tuple[str, str]]) -> pa.Table:
+    return pa.table(
+        {
+            'nloc_001': [LOCATIONS[0].code] * len(pairs),
+            'imt': ["PGA"] * len(pairs),
+            'sources_digest': [s for s, _ in pairs],
+            'gmms_digest': [g for _, g in pairs],
+            'values': pa.array([[float(i)] for i in range(len(pairs))], type=pa.list_(pa.float32())),
+        }
+    )
+
+
+@pytest.mark.parametrize(
+    "pairs,message",
+    [
+        # the right number of rows, but one is not for a component branch
+        (
+            [("source0", "gmm0"), ("source1", "gmm1"), ("source2", "gmm2"), ("sourceX", "gmmX")],
+            r"1 component branches have no rates \(first \['source3gmm3'\]\), 1 rates are",
+        ),
+        # the right number of rows, but one component branch twice
+        (
+            [("source0", "gmm0"), ("source0", "gmm0"), ("source2", "gmm2"), ("source3", "gmm3")],
+            r"1 component branches have no rates \(first \['source1gmm1'\]\), 1 rates are duplicates",
+        ),
+    ],
+    ids=["unexpected", "duplicate"],
+)
+def test_job_probs_digest_mismatch(pairs, message):
+    with pytest.raises(KeyError, match=message):
+        job_probs(single_job_table(pairs), LOCATIONS[0], "PGA")
+
+
+def test_job_probs_digest_mismatch_message_is_short():
+    component_digests = [f"missing{i}" for i in range(100)]
+    table = single_job_table([(f"s{i}", f"g{i}") for i in range(100)])
+    with pytest.raises(KeyError) as excinfo:
+        job_probs(table, LOCATIONS[0], "PGA", component_digests)
+    assert len(str(excinfo.value)) < 500

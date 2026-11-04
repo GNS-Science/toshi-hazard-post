@@ -5,6 +5,7 @@ import itertools
 import logging
 import posixpath
 import time
+from collections.abc import Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -134,6 +135,86 @@ def group_batch_rows(batch_datatable: pa.Table) -> dict[tuple[str, str], 'npt.ND
         location_id, imt_id = divmod(int(sorted_job_ids[start]), len(imts))
         job_rows[(locations[location_id], imts[imt_id])] = order[start:end]
     return job_rows
+
+
+def component_row_ids(batch_datatable: pa.Table, component_digests: Sequence[str]) -> 'npt.NDArray':
+    """Find the component branch of each row of a batch datatable.
+
+    A row's component branch digest is its sources digest followed by its gmms digest.
+
+    Args:
+        batch_datatable: the datatable produced by get_batch_table.
+        component_digests: the hash digests of the component branches.
+
+    Returns:
+        For each row, the index into component_digests of the row's component branch, or -1 if the row is not
+            for a component branch.
+    """
+    if len(batch_datatable) == 0:
+        return np.empty(0, dtype=np.int64)
+    source_ids, sources = _string_ids(batch_datatable['sources_digest'])
+    gmm_ids, gmms = _string_ids(batch_datatable['gmms_digest'])
+    # a batch has few distinct (source, gmm) pairs, so look up each pair once rather than each row
+    pair_ids = source_ids.astype(np.int64) * len(gmms) + gmm_ids
+    pairs, row_pairs = np.unique(pair_ids, return_inverse=True)
+    index = {digest: i for i, digest in enumerate(component_digests)}
+    pair_components = np.array(
+        [index.get(sources[pair // len(gmms)] + gmms[pair % len(gmms)], -1) for pair in pairs.tolist()],
+        dtype=np.int64,
+    )
+    return pair_components[row_pairs.reshape(-1)]
+
+
+def get_job_probs(
+    batch_datatable: pa.Table,
+    job_rows: dict[tuple[str, str], 'npt.NDArray'],
+    component_ids: 'npt.NDArray',
+    component_digests: Sequence[str],
+    location: 'CodedLocation',
+    imt: str,
+) -> 'npt.NDArray':
+    """Get the realization probabilities of one aggregation job (one IMT and location), by component branch.
+
+    Args:
+        batch_datatable: the datatable produced by get_batch_table.
+        job_rows: the rows of batch_datatable for each job, produced by group_batch_rows.
+        component_ids: the component branch of each row of batch_datatable, produced by component_row_ids.
+        component_digests: the hash digests of the component branches, in the order wanted for the array.
+        location: the location of the site.
+        imt: the intensity measure type.
+
+    Returns:
+        The probabilities with shape (n component branches, n IMTL), where row i is for component_digests[i].
+
+    Raises:
+        KeyError: if the job's rows are not exactly one for each component branch.
+    """
+    rows = job_rows.get((location.downsample(0.001).code, imt))
+    if rows is None:
+        raise KeyError(f"no records found for location: {location}, imt: {imt}")
+    n_components = len(component_digests)
+    if len(rows) != n_components:
+        msg = (
+            f"incorrect number of records found for location: "
+            f"{location}, imt: {imt}. Expected {n_components}, got {len(rows)}"
+        )
+        raise KeyError(msg)
+
+    ids = component_ids[rows]
+    counts = np.bincount(ids[ids >= 0], minlength=n_components)
+    if (counts != 1).any():
+        missing = [component_digests[i] for i in np.flatnonzero(counts == 0).tolist()]
+        # every task of a bad run fails the same way, so keep the message short
+        n_unexpected = len(rows) - (n_components - len(missing))
+        raise KeyError(
+            f"expected rates for {n_components} component branches, got {len(rows)}: "
+            f"{len(missing)} component branches have no rates (first {missing[:5]}), "
+            f"{n_unexpected} rates are duplicates or not for a component branch"
+        )
+    ordered_rows = np.empty(n_components, dtype=np.int64)
+    ordered_rows[ids] = rows
+    values = batch_datatable['values'].take(ordered_rows).combine_chunks()
+    return values.flatten().to_numpy().reshape(n_components, -1)
 
 
 def get_job_datatable(
