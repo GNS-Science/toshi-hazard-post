@@ -23,12 +23,6 @@
   and 16 imts of NSHM_v1.0.4 (944 jobs) the parent process prepares the jobs about 17x faster (~111 s to ~6.4 s,
   8.5 to 148 jobs per second). The job files are unchanged.
   ([#96](https://github.com/GNS-Science/toshi-hazard-post/issues/96))
-- New `THP_NUM_LOAD_THREADS` (default 1): the number of realization batches the main process loads at once in
-  threads, ahead of the workers. Each batch takes about 1-2 GB in the main process while it is held. On a 36-core
-  machine with 30 workers, runs are limited by the workers, so loading ahead gave no speedup; it may help with many
-  more workers.
-  ([#97](https://github.com/GNS-Science/toshi-hazard-post/issues/97),
-  [#100](https://github.com/GNS-Science/toshi-hazard-post/issues/100))
 - One S3 filesystem is built per process and shared by every dataset read and aggregation write, instead of one
   per call. Building one can take 4-8 s off EC2 (the AWS SDK probing for instance credentials) and blocks other
   threads while it does. `AWS_EC2_METADATA_DISABLED=true` removes the remaining one-off delay.

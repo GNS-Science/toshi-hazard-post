@@ -3,11 +3,10 @@
 import itertools
 import logging
 import time
-from collections import deque
 from collections.abc import Callable, Generator, Iterable
-from concurrent.futures import FIRST_COMPLETED, Executor, Future, ProcessPoolExecutor, ThreadPoolExecutor, wait
+from concurrent.futures import FIRST_COMPLETED, Executor, Future, ProcessPoolExecutor, wait
 from multiprocessing import shared_memory
-from typing import TYPE_CHECKING, TypeVar
+from typing import TYPE_CHECKING
 
 import numpy as np
 import pyarrow as pa
@@ -25,7 +24,7 @@ from toshi_hazard_post.data import (
     get_realizations_dataset,
     group_batch_rows,
 )
-from toshi_hazard_post.local_config import NUM_LOAD_THREADS, NUM_WORKERS
+from toshi_hazard_post.local_config import NUM_WORKERS
 from toshi_hazard_post.logic_tree import HazardLogicTree, build_branch_index_table
 
 if TYPE_CHECKING:
@@ -37,29 +36,6 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 PARTITION_RESOLUTION = 1.0
-
-T = TypeVar('T')
-R = TypeVar('R')
-
-
-def _prefetch(load: Callable[[T], R], items: Iterable[T], n: int) -> Generator[R, None, None]:
-    """Yield load(item) for each item, in order, running up to n loads ahead in threads.
-
-    At most n results are held at once, counting the one last yielded, provided the caller drops its reference
-    to each result before asking for the next.
-    """
-    it = iter(items)
-    executor = ThreadPoolExecutor(max_workers=n)
-    pending = deque(executor.submit(load, item) for item in itertools.islice(it, n))
-    try:
-        while pending:
-            result = pending.popleft().result()
-            yield result
-            del result
-            pending.extend(executor.submit(load, item) for item in itertools.islice(it, 1))
-    finally:
-        # don't wait for loads still running if the run has failed or stopped early
-        executor.shutdown(wait=False, cancel_futures=True)
 
 
 def _load_batch(
@@ -87,7 +63,6 @@ def _generate_agg_jobs(
     imts: list[str],
     compatibility_key: str,
     component_branches: list['HazardComponentBranch'],
-    n_load_threads: int,
 ) -> Generator[AggTaskArgs, None, None]:
 
     gmms_digests = [branch.gmcm_hash_digest for branch in component_branches]
@@ -105,25 +80,15 @@ def _generate_agg_jobs(
         location_bins = bin_locations(locations, PARTITION_RESOLUTION)
         batches += [(vs30, nloc_0, location_bin) for nloc_0, location_bin in location_bins.items()]
 
-    def load(batch):
-        vs30, nloc_0, location_bin = batch
-        return (
-            vs30,
-            nloc_0,
-            location_bin,
-            *_load_batch(vs30, nloc_0, compatibility_key, sources_digests, gmms_digests, imts, component_digests),
+    for vs30, nloc_0, location_bin in batches:
+        batch_datatable, job_rows, component_ids = _load_batch(
+            vs30, nloc_0, compatibility_key, sources_digests, gmms_digests, imts, component_digests
         )
-
-    # each batch comes with its tables, rather than zipping batches with the tables, because zip would hold
-    # on to the previous tables while the next load starts
-    for vs30, nloc_0, location_bin, batch_datatable, job_rows, component_ids in _prefetch(
-        load, batches, n_load_threads
-    ):
         log.info("batch %d, %s", vs30, nloc_0)
         for location, imt in itertools.product(location_bin.locations, imts):
             probs = get_job_probs(batch_datatable, job_rows, component_ids, component_digests, location, imt)
             yield AggTaskArgs(location=location, vs30=vs30, imt=imt, probs=probs)
-        # drop this batch before the next is requested, so that no more than n_load_threads are held at once
+        # drop this batch before the next is loaded, so that only one is held at a time
         del batch_datatable, job_rows, component_ids
 
 
@@ -242,7 +207,7 @@ def run_aggregation(args: AggregationArgs, pool_executor: Executor | None = None
     calculators.warm_up()
     pool_executor = pool_executor or ProcessPoolExecutor(max_workers=NUM_WORKERS)
     with pool_executor as executor:
-        tasks = _generate_agg_jobs(sites, imts, args.general.compatibility_key, component_branches, NUM_LOAD_THREADS)
+        tasks = _generate_agg_jobs(sites, imts, args.general.compatibility_key, component_branches)
         num_jobs, num_failed = _run_tasks(executor, calc_aggregation, tasks, shared_args, 2 * NUM_WORKERS)
 
     time_parallel_end = time.perf_counter()

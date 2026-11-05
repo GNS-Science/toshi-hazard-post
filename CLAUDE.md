@@ -27,7 +27,7 @@ Version is derived from the git tag by hatch-vcs; `toshi_hazard_post/_version.py
 thp aggregate demo/hazard_mini.toml     # or: uv run thp aggregate ...
 ```
 
-Runtime config comes from env vars, or a `.env` file (override the path with `THP_ENV_FILE`): `THP_RLZ_DIR` and `THP_AGG_DIR` (local path or `s3://` URI), `THP_NUM_WORKERS`, `THP_NUM_LOAD_THREADS`. The calculation itself is described by a TOML input file — see `docs/usage.md` and the `demo/` directory.
+Runtime config comes from env vars, or a `.env` file (override the path with `THP_ENV_FILE`): `THP_RLZ_DIR` and `THP_AGG_DIR` (local path or `s3://` URI), `THP_NUM_WORKERS`. The calculation itself is described by a TOML input file — see `docs/usage.md` and the `demo/` directory.
 
 **Gotcha:** `local_config.py` reads the environment once at import time into module-level constants, and consumers do `from ... import AGG_DIR`, binding the value at *their* import time. Setting an env var after import has no effect. Tests monkeypatch the consuming module's attribute instead (`monkeypatch.setattr(toshi_hazard_post.data, 'AGG_DIR', ...)`).
 
@@ -58,7 +58,7 @@ Rates are additive, probabilities are not — hence the prob→rate→aggregate�
 
 1. Resolve sites and logic trees (`aggregation_setup.py`), build `HazardLogicTree`.
 2. Compute `weights` and `branch_hash_table`, convert the hash table to a table of integer indices into `component_branches` (`build_branch_index_table` in `logic_tree.py`), and copy the weights and index table into **named shared memory** so worker processes read them without pickling (names in `constants.py`). Each job's probabilities are ordered by the same component index in the parent, so composite rates are summed by position rather than by digest lookup.
-3. `_generate_agg_jobs()` batches work by `(vs30, nloc_0)` — a 1° location bin — so the parquet dataset is scanned once per batch rather than per site. Up to `THP_NUM_LOAD_THREADS` batches are loaded ahead in parent threads (`_prefetch`), all sharing one `S3FileSystem` per process (`data.resolve_target`). Each batch is sliced per `(location, imt)` into a `(component branch, IMTL)` probability array, ordered by the same component index as the shared index table (`data.get_job_probs`).
+3. `_generate_agg_jobs()` batches work by `(vs30, nloc_0)` — a 1° location bin — so the parquet dataset is scanned once per batch rather than per site. Batches are loaded one at a time in the parent, sharing one `S3FileSystem` per process (`data.resolve_target`). Each batch is sliced per `(location, imt)` into a `(component branch, IMTL)` probability array, ordered by the same component index as the shared index table (`data.get_job_probs`).
 4. Each array is passed to its task in `AggTaskArgs.probs` on a `ProcessPoolExecutor`, with at most `2 * THP_NUM_WORKERS` tasks in flight (`_run_tasks`). `aggregation_calc.calc_aggregation()` converts to rates, sums into composite rates via the shared index table (laid out level-major, `(IMTL, composite branch)`), computes weighted aggregates, converts back to probabilities, and saves.
 
 Because the shared memory segments have fixed names and are created with `create=True` and unlinked without a `try/finally`, a crashed run leaves them behind and the next run fails with `FileExistsError`. Two concurrent runs on one machine collide for the same reason.
