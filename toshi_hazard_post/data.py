@@ -190,6 +190,7 @@ def get_job_probs(
 
     Raises:
         KeyError: if the job's rows are not exactly one for each component branch.
+        ValueError: if any of the job's rows or probabilities are null.
     """
     rows = job_rows.get((location.downsample(0.001).code, imt))
     if rows is None:
@@ -216,7 +217,16 @@ def get_job_probs(
     ordered_rows = np.empty(n_components, dtype=np.int64)
     ordered_rows[ids] = rows
     values = batch_datatable['values'].take(ordered_rows).combine_chunks()
-    return values.flatten().to_numpy().reshape(n_components, -1)
+    # flatten() drops null rows and to_numpy() refuses null values, so check first and say which job is bad
+    if values.null_count:
+        raise ValueError(
+            f"bad realizations for location: {location}, imt: {imt}: "
+            f"{values.null_count} component branches have no probabilities"
+        )
+    flat = values.flatten()
+    if flat.null_count:
+        raise ValueError(f"bad realizations for location: {location}, imt: {imt}: {flat.null_count} null probabilities")
+    return flat.to_numpy().reshape(n_components, -1)
 
 
 def save_aggregations(

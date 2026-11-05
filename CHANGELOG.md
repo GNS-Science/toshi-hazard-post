@@ -28,8 +28,8 @@
   threads while it does. `AWS_EC2_METADATA_DISABLED=true` removes the remaining one-off delay.
 - Each job's realization probabilities are passed to its worker as an array, already ordered by component branch,
   instead of being written to and read back from an ORC file, and converted to rates in one operation. The parent
-  checks that a job has exactly one row per component branch. At most 2 x `THP_NUM_WORKERS` tasks are in flight,
-  so jobs are not prepared far ahead of the workers. ([#97](https://github.com/GNS-Science/toshi-hazard-post/issues/97))
+  checks that a job has exactly one row per component branch and no null probabilities. At most
+  2 x `THP_NUM_WORKERS` tasks are in flight, so jobs are not prepared far ahead of the workers. ([#97](https://github.com/GNS-Science/toshi-hazard-post/issues/97))
 - `aggregation_calc.AggTaskArgs` has the job's probabilities in `probs` instead of `table_filepath`.
 - `data.get_job_datatable` takes the rows of each job, from the new `data.group_batch_rows`, as its second argument.
 - `calculators.weighted_quantiles` takes values with shape (IMTL, branch) and returns the quantiles of every level

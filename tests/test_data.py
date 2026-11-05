@@ -233,14 +233,16 @@ def test_job_probs_incorrect_number_of_records(batch_table):
         job_probs(batch_table, LOCATIONS[0], "PGA", COMPONENT_DIGESTS + ["source9gmm9"])
 
 
-def single_job_table(pairs: list[tuple[str, str]]) -> pa.Table:
+def single_job_table(pairs: list[tuple[str, str]], values: list | None = None) -> pa.Table:
+    if values is None:
+        values = [[float(i)] for i in range(len(pairs))]
     return pa.table(
         {
             'nloc_001': [LOCATIONS[0].code] * len(pairs),
             'imt': ["PGA"] * len(pairs),
             'sources_digest': [s for s, _ in pairs],
             'gmms_digest': [g for _, g in pairs],
-            'values': pa.array([[float(i)] for i in range(len(pairs))], type=pa.list_(pa.float32())),
+            'values': pa.array(values, type=pa.list_(pa.float32())),
         }
     )
 
@@ -272,3 +274,29 @@ def test_job_probs_digest_mismatch_message_is_short():
     with pytest.raises(KeyError) as excinfo:
         job_probs(table, LOCATIONS[0], "PGA", component_digests)
     assert len(str(excinfo.value)) < 500
+
+
+COMPONENT_PAIRS = [(f"source{i}", f"gmm{i}") for i in range(N_BRANCHES)]
+
+
+@pytest.mark.parametrize(
+    "values,message",
+    [
+        ([[0.1, 0.2], [0.3, None], [0.5, 0.6], [0.7, 0.8]], r"1 null probabilities"),
+        ([[0.1, 0.2], None, [0.5, 0.6], [0.7, 0.8]], r"1 component branches have no probabilities"),
+    ],
+    ids=["null value", "null row"],
+)
+def test_job_probs_nulls(values, message):
+    with pytest.raises(ValueError, match=f"PGA.*{message}"):
+        job_probs(single_job_table(COMPONENT_PAIRS, values), LOCATIONS[0], "PGA")
+
+
+def test_job_probs_nulls_in_other_jobs_are_ignored():
+    """Only the job's own rows are checked."""
+    job = single_job_table(COMPONENT_PAIRS, [[0.1, 0.2]] * N_BRANCHES)
+    other = single_job_table(COMPONENT_PAIRS, [[0.1, None]] * N_BRANCHES).set_column(
+        1, 'imt', pa.array(["SA(1.0)"] * N_BRANCHES)
+    )
+    probs = job_probs(pa.concat_tables([job, other]), LOCATIONS[0], "PGA")
+    assert probs.shape == (N_BRANCHES, 2)
