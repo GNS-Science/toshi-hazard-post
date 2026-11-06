@@ -182,18 +182,18 @@ def calc_aggregation(task_args: AggTaskArgs, shared_args: AggSharedArgs) -> None
     time1 = time.perf_counter()
     component_rates_array = calculators.prob_to_rate(task_args.probs, 1.0)
     time2 = time.perf_counter()
-    log.debug("worker %s: time to convert_probs_to_rates() %0.2f", worker_name, time2 - time1)
+    log.debug("worker %s: time to convert probabilities to rates %0.2f seconds", worker_name, time2 - time1)
 
     log.debug('worker %s: rates_table %s', worker_name, component_rates_array.shape)
 
     composite_rates = build_branch_rates(branch_index_table, component_rates_array)
-    time4 = time.perf_counter()
-    log.debug("worker %s: time to build_ranch_rates %0.2f seconds", worker_name, time4 - time2)
+    time3 = time.perf_counter()
+    log.debug("worker %s: time to build_branch_rates %0.2f seconds", worker_name, time3 - time2)
 
     log.info("worker %s:  calculating aggregates . . . ", worker_name)
     hazard = calculate_aggs(composite_rates, weights, agg_types)
-    time5 = time.perf_counter()
-    log.debug("worker %s: time to calculate aggs %0.2f seconds", worker_name, time5 - time4)
+    time4 = time.perf_counter()
+    log.debug("worker %s: time to calculate aggs %0.2f seconds", worker_name, time4 - time3)
 
     probs = calculators.rate_to_prob(hazard, 1.0)
     if shared_args.skip_save:
@@ -201,5 +201,5 @@ def calc_aggregation(task_args: AggTaskArgs, shared_args: AggSharedArgs) -> None
     else:
         log.info("worker %s saving result . . . ", worker_name)
         save_aggregations(probs, location, vs30, imt, agg_types, hazard_model_id, compatibility_key)
-    time6 = time.perf_counter()
-    log.info("worker %s time to perform one aggregation %0.2f seconds", worker_name, time6 - time0)
+    time5 = time.perf_counter()
+    log.info("worker %s time to perform one aggregation %0.2f seconds", worker_name, time5 - time0)
