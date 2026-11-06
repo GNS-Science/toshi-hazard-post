@@ -21,7 +21,7 @@
 - The realization table of each (location, imt) job is taken from the batch table using row indices found by
   grouping the batch once, instead of filtering the whole batch table for every job. For a batch of 59 locations
   and 16 imts of NSHM_v1.0.4 (944 jobs) the parent process prepares the jobs about 17x faster (~111 s to ~6.4 s,
-  8.5 to 148 jobs per second). The job files are unchanged.
+  8.5 to 148 jobs per second).
   ([#96](https://github.com/GNS-Science/toshi-hazard-post/issues/96))
 - One S3 filesystem is built per process and shared by every dataset read and aggregation write, instead of one
   per call. Building one can take 4-8 s off EC2 (the AWS SDK probing for instance credentials) and blocks other
@@ -29,10 +29,11 @@
 - Each job's realization probabilities are passed to its worker as an array, already ordered by component branch,
   instead of being written to and read back from an ORC file, and converted to rates in one operation. The parent
   checks that a job has exactly one row per component branch, all of the same length and with no null
-  probabilities. At most 2 x `THP_NUM_WORKERS` tasks are in flight, so jobs are not prepared far ahead of the
+  probabilities. A job that fails these checks now stops the run, where before only that task failed and the run
+  went on. At most 2 x `THP_NUM_WORKERS` tasks are in flight, so jobs are not prepared far ahead of the
   workers. ([#97](https://github.com/GNS-Science/toshi-hazard-post/issues/97))
 - `aggregation_calc.AggTaskArgs` has the job's probabilities in `probs` instead of `table_filepath`.
-- `data.get_job_datatable` takes the rows of each job, from the new `data.group_batch_rows`, as its second argument.
+- New `data.group_batch_rows` finds the rows of each job in a batch table, for `data.get_job_probs`.
 - `calculators.weighted_quantiles` takes values with shape (IMTL, branch) and returns the quantiles of every level
   with shape (quantile, IMTL), rather than taking the values of a single level.
 - `calculators.weighted_avg_and_std` takes values with shape (IMTL, branch) rather than (branch, IMTL).
