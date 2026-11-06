@@ -171,6 +171,8 @@ def calc_aggregation(task_args: AggTaskArgs, shared_args: AggSharedArgs) -> None
     compatibility_key = shared_args.compatibility_key
     hazard_model_id = shared_args.hazard_model_id
 
+    # the arrays below point into the shared memory but do not keep it mapped: never close() these
+    # SharedMemory objects while the arrays are alive, or reading them segfaults
     branch_index_table_shm = shared_memory.SharedMemory(name=shared_args.branch_index_table_shm_name)
     branch_index_table: npt.NDArray = np.ndarray(
         shared_args.branch_index_table_shape,
