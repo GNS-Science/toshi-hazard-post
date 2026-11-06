@@ -49,6 +49,9 @@
   failed are logged first. ([#105](https://github.com/GNS-Science/toshi-hazard-post/issues/105))
 - `aggregation_calc.AggSharedArgs` has the segment names in `weights_shm_name` and `branch_index_table_shm_name`;
   `constants.WEIGHTS_SHM_NAME` and `constants.BRANCH_INDEX_TABLE_SHM_NAME` are replaced by `constants.SHM_NAME_PREFIX`.
+- A `debug.restart` weights file that is not float64 is converted to float64 when loaded. Before, the workers read
+  it as float64 regardless: a float32 file made every task fail with `buffer is too small`, and an integer file of
+  the same size would have given wrong aggregates.
 
 ### Removed
 - `aggregation_calc.calc_composite_rates` and `aggregation_calc.create_component_dict`.

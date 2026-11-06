@@ -181,7 +181,8 @@ def run_aggregation(args: AggregationArgs, pool_executor: Executor | None = None
         log.info('time to build weight array and hash table %0.2f seconds' % (toc - tic))
     else:
         branch_hash_table = np.load(args.debug.restart[0])
-        weights = np.load(args.debug.restart[1])
+        # the workers read the weights as float64
+        weights = np.load(args.debug.restart[1]).astype(np.float64, copy=False)
         if weights.shape != (len(branch_hash_table),):
             raise ValueError(
                 f"restart files do not match: {args.debug.restart[0]} has {len(branch_hash_table)} composite branches "
