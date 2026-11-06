@@ -134,7 +134,8 @@ def run_aggregation(args: AggregationArgs, pool_executor: Executor | None = None
     Args:
         args: the aggregation configuration
         pool_executor: the Executor (e.g. ProcessPoolExecutor) to use for launching the parallel tasks. If
-            none given, ProcessPoolExecutor(max_workers=NUM_WORKERS) is used
+            none given, ProcessPoolExecutor(max_workers=NUM_WORKERS) is used. Either way, at most
+            2 * NUM_WORKERS tasks are in flight, whatever the executor's own number of workers.
     """
     time0 = time.perf_counter()
     # get the sites
