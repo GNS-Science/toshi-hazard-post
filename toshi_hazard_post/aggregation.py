@@ -74,22 +74,19 @@ def _generate_agg_jobs(
     vs30s_unique = set([site.vs30 for site in sites])
 
     log.info("creating batches from %d sites and %d vs30s", len(sites), len(vs30s_unique))
-    batches = []
     for vs30 in vs30s_unique:
         locations = [site.location for site in sites if site.vs30 == vs30]
         location_bins = bin_locations(locations, PARTITION_RESOLUTION)
-        batches += [(vs30, nloc_0, location_bin) for nloc_0, location_bin in location_bins.items()]
-
-    for vs30, nloc_0, location_bin in batches:
-        batch_datatable, job_rows, component_ids = _load_batch(
-            vs30, nloc_0, compatibility_key, sources_digests, gmms_digests, imts, component_digests
-        )
-        log.info("batch %d, %s", vs30, nloc_0)
-        for location, imt in itertools.product(location_bin.locations, imts):
-            probs = get_job_probs(batch_datatable, job_rows, component_ids, component_digests, location, imt)
-            yield AggTaskArgs(location=location, vs30=vs30, imt=imt, probs=probs)
-        # drop this batch before the next is loaded, so that only one is held at a time
-        del batch_datatable, job_rows, component_ids
+        for nloc_0, location_bin in location_bins.items():
+            batch_datatable, job_rows, component_ids = _load_batch(
+                vs30, nloc_0, compatibility_key, sources_digests, gmms_digests, imts, component_digests
+            )
+            log.info("batch %d, %s", vs30, nloc_0)
+            for location, imt in itertools.product(location_bin.locations, imts):
+                probs = get_job_probs(batch_datatable, job_rows, component_ids, component_digests, location, imt)
+                yield AggTaskArgs(location=location, vs30=vs30, imt=imt, probs=probs)
+            # drop this batch before the next is loaded, so that only one is held at a time
+            del batch_datatable, job_rows, component_ids
 
 
 def _run_tasks(
