@@ -44,9 +44,10 @@
 ### Fixed
 - The shared memory segments holding the weights and branch index table are removed however a run ends, so a run
   that fails no longer makes the next one fail with `FileExistsError`. Each run names its segments
-  `thp_<pid>_<random>_weights` and `..._index`, so two runs on one machine no longer collide; a run killed with
-  `SIGKILL` can still leave its segments in `/dev/shm`. When a run stops with an error, the tasks that had already
-  failed are logged first. ([#105](https://github.com/GNS-Science/toshi-hazard-post/issues/105))
+  `thp_<pid>_<random>_weights` and `..._index`, so two runs on one machine no longer collide. A run killed with
+  `SIGTERM` or `SIGKILL` leaves its pool workers running, and they keep its segments in `/dev/shm` until they are
+  killed. When a run stops with an error, the tasks that had already failed are logged first.
+  ([#105](https://github.com/GNS-Science/toshi-hazard-post/issues/105))
 - `aggregation_calc.AggSharedArgs` has the segment names in `weights_shm_name` and `branch_index_table_shm_name`;
   `constants.WEIGHTS_SHM_NAME` and `constants.BRANCH_INDEX_TABLE_SHM_NAME` are replaced by `constants.SHM_NAME_PREFIX`.
 - A `debug.restart` weights file that is not float64 is converted to float64 when loaded. Before, the workers read
