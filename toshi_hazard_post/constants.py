@@ -1,4 +1,5 @@
 """Names of shared memory objects."""
 
-WEIGHTS_SHM_NAME = "weights_shm"
-BRANCH_INDEX_TABLE_SHM_NAME = "branch_index_table_shm"
+# Each run names its shared memory segments with this prefix, its process id and a random suffix, so runs do not
+# collide. A run killed with SIGKILL leaves its segments behind (in /dev/shm on Linux); the prefix finds them.
+SHM_NAME_PREFIX = "thp_"

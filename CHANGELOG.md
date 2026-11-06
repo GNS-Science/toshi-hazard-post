@@ -41,6 +41,15 @@
 - The error raised when a job's realizations do not match the component branches reports counts and the first few
   missing digests rather than every digest.
 
+### Fixed
+- The shared memory segments holding the weights and branch index table are removed however a run ends, so a run
+  that fails no longer makes the next one fail with `FileExistsError`. Each run names its segments
+  `thp_<pid>_<random>_weights` and `..._index`, so two runs on one machine no longer collide; a run killed with
+  `SIGKILL` can still leave its segments in `/dev/shm`. When a run stops with an error, the tasks that had already
+  failed are logged first. ([#105](https://github.com/GNS-Science/toshi-hazard-post/issues/105))
+- `aggregation_calc.AggSharedArgs` has the segment names in `weights_shm_name` and `branch_index_table_shm_name`;
+  `constants.WEIGHTS_SHM_NAME` and `constants.BRANCH_INDEX_TABLE_SHM_NAME` are replaced by `constants.SHM_NAME_PREFIX`.
+
 ### Removed
 - `aggregation_calc.calc_composite_rates` and `aggregation_calc.create_component_dict`.
 - `THP_WORKING_DIR` is no longer used: jobs are not written to files.

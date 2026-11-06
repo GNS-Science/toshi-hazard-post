@@ -2,9 +2,12 @@
 
 import itertools
 import logging
+import os
+import secrets
 import time
-from collections.abc import Callable, Generator, Iterable
+from collections.abc import Callable, Generator, Iterable, Iterator
 from concurrent.futures import FIRST_COMPLETED, Executor, Future, ProcessPoolExecutor, wait
+from contextlib import contextmanager
 from multiprocessing import shared_memory
 from typing import TYPE_CHECKING
 
@@ -56,6 +59,18 @@ def _load_batch(
     component_ids = component_row_ids(batch_datatable, component_digests)
     log.debug("loaded batch %d, %s in %0.1f seconds", vs30, nloc_0, time.perf_counter() - t0)
     return batch_datatable, job_rows, component_ids
+
+
+@contextmanager
+def _shared_array(name: str, array: 'npt.NDArray') -> Iterator[None]:
+    """Copy array into a new shared memory segment, and remove the segment however the block is left."""
+    shm = shared_memory.SharedMemory(name=name, create=True, size=array.nbytes)
+    try:
+        np.ndarray(array.shape, dtype=array.dtype, buffer=shm.buf)[:] = array
+        yield
+    finally:
+        shm.close()
+        shm.unlink()
 
 
 def _generate_agg_jobs(
@@ -116,11 +131,17 @@ def _run_tasks(
                 num_failed += 1
                 log.error("Exception encountered for task args %s: %r", task_args, exception)
 
-    for task_args in tasks:
-        if len(pending) >= max_in_flight:
-            collect(wait(pending, return_when=FIRST_COMPLETED).done)
-        pending[executor.submit(fn, task_args, shared_args)] = task_args
-        num_jobs += 1
+    try:
+        for task_args in tasks:
+            if len(pending) >= max_in_flight:
+                collect(wait(pending, return_when=FIRST_COMPLETED).done)
+            pending[executor.submit(fn, task_args, shared_args)] = task_args
+            num_jobs += 1
+    except Exception:
+        # a job that fails its checks, or a broken process pool: log the tasks that failed before re-raising
+        collect(wait(pending).done)
+        log.error("run stopped with %d tasks submitted, %d failed", num_jobs, num_failed)
+        raise
     collect(wait(pending).done)
     return num_jobs, num_failed
 
@@ -176,22 +197,14 @@ def run_aggregation(args: AggregationArgs, pool_executor: Executor | None = None
     log.info("Size of weight array: %dMB", weights.nbytes >> 20)
     log.info("Size of branch index table: %dMB", branch_index_table.nbytes >> 20)
 
-    weights_shm = shared_memory.SharedMemory(name=constants.WEIGHTS_SHM_NAME, create=True, size=weights.nbytes)
-    branch_index_table_shm = shared_memory.SharedMemory(
-        name=constants.BRANCH_INDEX_TABLE_SHM_NAME, create=True, size=branch_index_table.nbytes
-    )
-
-    bit: npt.NDArray = np.ndarray(
-        branch_index_table.shape, dtype=branch_index_table.dtype, buffer=branch_index_table_shm.buf
-    )
-    bit[:] = branch_index_table[:]
-    wgt: npt.NDArray = np.ndarray(weights.shape, dtype=weights.dtype, buffer=weights_shm.buf)
-    wgt[:] = weights[:]
-
+    # names unique to this run, so that runs on one machine do not collide
+    run_id = f"{constants.SHM_NAME_PREFIX}{os.getpid()}_{secrets.token_hex(4)}"
     shared_args = AggSharedArgs(
         weights_shape=weights.shape,
         branch_index_table_shape=branch_index_table.shape,
         branch_index_table_dtype=branch_index_table.dtype.str,
+        weights_shm_name=f"{run_id}_weights",
+        branch_index_table_shm_name=f"{run_id}_index",
         agg_types=agg_types,
         hazard_model_id=args.general.hazard_model_id,
         compatibility_key=args.general.compatibility_key,
@@ -204,15 +217,15 @@ def run_aggregation(args: AggregationArgs, pool_executor: Executor | None = None
     # compile before the workers are started so that they do not each compile for their first task
     calculators.warm_up()
     pool_executor = pool_executor or ProcessPoolExecutor(max_workers=NUM_WORKERS)
-    with pool_executor as executor:
+    with (
+        _shared_array(shared_args.weights_shm_name, weights),
+        _shared_array(shared_args.branch_index_table_shm_name, branch_index_table),
+        pool_executor as executor,
+    ):
         tasks = _generate_agg_jobs(sites, imts, args.general.compatibility_key, component_branches)
         num_jobs, num_failed = _run_tasks(executor, calc_aggregation, tasks, shared_args, 2 * NUM_WORKERS)
 
     time_parallel_end = time.perf_counter()
-    branch_index_table_shm.close()
-    branch_index_table_shm.unlink()
-    weights_shm.close()
-    weights_shm.unlink()
 
     time1 = time.perf_counter()
     log.info("total time: processed %d calculations in %0.3f seconds", num_jobs, time1 - time0)
