@@ -32,6 +32,11 @@
   probabilities. A job that fails these checks now stops the run, where before only that task failed and the run
   went on. At most 2 x `THP_NUM_WORKERS` tasks are in flight, so jobs are not prepared far ahead of the
   workers. ([#97](https://github.com/GNS-Science/toshi-hazard-post/issues/97))
+- The parent process releases the logic tree, with its cached composite branches, once the weights and branch index
+  table are built, instead of holding it for the whole run. For NSHM_v1.0.4 this frees about 1.15 GB of parent memory
+  (1267 MB to 105 MB RSS) while batches are loaded. Peak parent memory is unchanged, at about 1.36 GB for
+  NSHM_v1.0.4: it is reached while the weights and branch index table are built, before the logic tree is released.
+  ([#110](https://github.com/GNS-Science/toshi-hazard-post/issues/110))
 - `aggregation_calc.AggTaskArgs` has the job's probabilities in `probs` instead of `table_filepath`.
 - New `data.group_batch_rows` finds the rows of each job in a batch table, for `data.get_job_probs`.
 - `calculators.weighted_quantiles` takes values with shape (IMTL, branch) and returns the quantiles of every level
@@ -53,10 +58,6 @@
 - A `debug.restart` weights file that is not float64 is converted to float64 when loaded. Before, the workers read
   it as float64 regardless: a float32 file made every task fail with `buffer is too small`, and an integer file of
   the same size would have given wrong aggregates.
-- The parent process releases the logic tree, with its cached composite branches, once the weights and branch index
-  table are built, instead of holding it for the whole run. For NSHM_v1.0.4 this frees about 1.15 GB of parent memory
-  (1267 MB to 105 MB RSS) while batches are loaded.
-  ([#110](https://github.com/GNS-Science/toshi-hazard-post/issues/110))
 
 ### Removed
 - `aggregation_calc.calc_composite_rates` and `aggregation_calc.create_component_dict`.
