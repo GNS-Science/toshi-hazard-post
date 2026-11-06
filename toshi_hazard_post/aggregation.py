@@ -195,7 +195,9 @@ def run_aggregation(args: AggregationArgs, pool_executor: Executor | None = None
     # workers look up component rates by position, so replace each digest with its index in component_digests
     component_digests = logic_tree.component_digests
     branch_index_table = build_branch_index_table(branch_hash_table, component_digests)
-    del branch_hash_table
+    # the logic tree caches every composite branch (over 1 GB for a production model); the batch loop needs only
+    # component_branches, which do not reference them
+    del branch_hash_table, logic_tree
     log.info("Size of weight array: %dMB", weights.nbytes >> 20)
     log.info("Size of branch index table: %dMB", branch_index_table.nbytes >> 20)
 
