@@ -8,6 +8,8 @@ toshi-hazard-post requires some configuration to run. This can either be done vi
 - `'THP_NUM_WORKERS'`: Number of parallel processes to run (default: 1).
 - `'THP_DELAY_MULTIPLIER'`: multiplier to apply to the delay of parallel workers. Parallel jobs are delayed by multiplier * mod(job_number, 10) to avoid too many simultaneous reads from the realization dataset.
 
+When reading from S3 on a machine that is not an AWS EC2 instance, setting `AWS_EC2_METADATA_DISABLED=true` avoids a delay of several seconds at start-up while the AWS SDK looks for EC2 instance credentials.
+
 By default, toshi-hazard-post will look for a configuration file `.env` in the local directory, though you can specify a different file with the env var `'THP_ENV_FILE'`.
 
 ## Using an input file to run the calculation

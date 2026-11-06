@@ -1,8 +1,12 @@
 """Functions for loading realizations and saving aggregations."""
 
+import functools
 import itertools
 import logging
+import os
+import posixpath
 import time
+from collections.abc import Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -10,6 +14,7 @@ import numpy as np
 import pyarrow as pa
 import pyarrow.compute as pc
 import pyarrow.dataset as ds
+import pyarrow.fs as fs
 from toshi_hazard_store.model.hazard_models_pydantic import HazardAggregateCurve
 from toshi_hazard_store.model.pyarrow import pyarrow_aggr_dataset, pyarrow_dataset
 
@@ -20,6 +25,30 @@ log = logging.getLogger(__name__)
 if TYPE_CHECKING:
     import numpy.typing as npt
     from nzshm_common.location.coded_location import CodedLocation
+
+
+@functools.cache
+def _s3_filesystem(pid: int) -> fs.S3FileSystem:
+    # building an S3FileSystem can take seconds (e.g. when the AWS SDK probes for EC2 instance credentials) and
+    # holds the GIL while it does, so build one per process rather than one per dataset. Keyed by process id so
+    # that a worker forked from the parent builds its own rather than using the parent's connections.
+    return fs.S3FileSystem(region=pyarrow_dataset.REGION)
+
+
+def resolve_target(target: str) -> tuple[str, fs.FileSystem]:
+    """Get the path and filesystem of a dataset, as toshi-hazard-store's configure_output does.
+
+    Every S3 target shares one S3FileSystem per process.
+
+    Args:
+        target: a local path or an S3 URI.
+
+    Returns:
+        The path within the filesystem, and the filesystem.
+    """
+    if target.startswith('s3://'):
+        return posixpath.normpath(target.removeprefix('s3://')), _s3_filesystem(os.getpid())
+    return str(Path(target).resolve()), fs.LocalFileSystem()
 
 
 def get_batch_table(
@@ -110,55 +139,101 @@ def group_batch_rows(batch_datatable: pa.Table) -> dict[tuple[str, str], 'npt.ND
     return job_rows
 
 
-def get_job_datatable(
-    batch_datatable: pa.Table,
-    job_rows: dict[tuple[str, str], 'npt.NDArray'],
-    location: 'CodedLocation',
-    imt: str,
-    n_expected: int,
-) -> pa.Table:
-    """Get the realization datatable for a specific aggregation job (one IMT, location, etc.).
+def component_row_ids(batch_datatable: pa.Table, component_digests: Sequence[str]) -> 'npt.NDArray':
+    """Find the component branch of each row of a batch datatable.
 
-    The batch_datatable is expected to be produced by get_batch_table which will have applied broader
-    filters on the dataset for vs30, nloc_0, etc.
+    A row's component branch digest is its sources digest followed by its gmms digest.
 
     Args:
-        batch_datatable: the pre-filtered datatable to take the rows of a specific aggregation job from.
-        job_rows: the rows of batch_datatable for each job, produced by group_batch_rows.
-        location: the location of the site.
-        imt: the intensity measure type.
-        n_expected: the number of records expected (typically the number of branches).
+        batch_datatable: the datatable produced by get_batch_table.
+        component_digests: the hash digests of the component branches.
 
     Returns:
-        The data table of the job, with the digests as strings.
+        For each row, the index into component_digests of the row's component branch, or -1 if the row is not
+            for a component branch.
+    """
+    if len(batch_datatable) == 0:
+        return np.empty(0, dtype=np.int64)
+    source_ids, sources = _string_ids(batch_datatable['sources_digest'])
+    gmm_ids, gmms = _string_ids(batch_datatable['gmms_digest'])
+    # a batch has few distinct (source, gmm) pairs, so look up each pair once rather than each row
+    pair_ids = source_ids.astype(np.int64) * len(gmms) + gmm_ids
+    pairs, row_pairs = np.unique(pair_ids, return_inverse=True)
+    index = {digest: i for i, digest in enumerate(component_digests)}
+    pair_components = np.array(
+        [index.get(sources[pair // len(gmms)] + gmms[pair % len(gmms)], -1) for pair in pairs.tolist()],
+        dtype=np.int64,
+    )
+    return pair_components[row_pairs.reshape(-1)]
+
+
+def get_job_probs(
+    batch_datatable: pa.Table,
+    job_rows: dict[tuple[str, str], 'npt.NDArray'],
+    component_ids: 'npt.NDArray',
+    component_digests: Sequence[str],
+    location: 'CodedLocation',
+    imt: str,
+) -> 'npt.NDArray':
+    """Get the realization probabilities of one aggregation job (one IMT and location), by component branch.
+
+    Args:
+        batch_datatable: the datatable produced by get_batch_table.
+        job_rows: the rows of batch_datatable for each job, produced by group_batch_rows.
+        component_ids: the component branch of each row of batch_datatable, produced by component_row_ids.
+        component_digests: the hash digests of the component branches, in the order wanted for the array.
+        location: the location of the site.
+        imt: the intensity measure type.
+
+    Returns:
+        The probabilities with shape (n component branches, n IMTL), where row i is for component_digests[i].
 
     Raises:
-        KeyError: if the batch datatable does not have n_expected records for the job.
+        KeyError: if the job's rows are not exactly one for each component branch.
+        ValueError: if any of the job's rows or probabilities are null, or the rows differ in length.
     """
-    t0 = time.perf_counter()
     rows = job_rows.get((location.downsample(0.001).code, imt))
     if rows is None:
         raise KeyError(f"no records found for location: {location}, imt: {imt}")
-    if len(rows) != n_expected:
+    n_components = len(component_digests)
+    if len(rows) != n_components:
         msg = (
             f"incorrect number of records found for location: "
-            f"{location}, imt: {imt}. Expected {n_expected}, got {len(rows)}"
+            f"{location}, imt: {imt}. Expected {n_components}, got {len(rows)}"
         )
         raise KeyError(msg)
 
-    job_table = batch_datatable.select(['sources_digest', 'gmms_digest', 'values']).take(rows)
-    # the workers need the digests as strings, not as dictionary encoded strings
-    table = pa.table(
-        {
-            "sources_digest": job_table['sources_digest'].cast(pa.string()),
-            "gmms_digest": job_table['gmms_digest'].cast(pa.string()),
-            "values": job_table['values'],
-        }
-    )
-
-    t1 = time.perf_counter()
-    log.debug("time to create job table: %0.5f seconds" % (t1 - t0))
-    return table
+    ids = component_ids[rows]
+    counts = np.bincount(ids[ids >= 0], minlength=n_components)
+    if (counts != 1).any():
+        missing = [component_digests[i] for i in np.flatnonzero(counts == 0).tolist()]
+        # every task of a bad run fails the same way, so keep the message short
+        n_unexpected = len(rows) - (n_components - len(missing))
+        raise KeyError(
+            f"expected rates for {n_components} component branches, got {len(rows)}: "
+            f"{len(missing)} component branches have no rates (first {missing[:5]}), "
+            f"{n_unexpected} rates are duplicates or not for a component branch"
+        )
+    ordered_rows = np.empty(n_components, dtype=np.int64)
+    ordered_rows[ids] = rows
+    values = batch_datatable['values'].take(ordered_rows).combine_chunks()
+    # flatten() drops null rows and to_numpy() refuses null values, so check first and say which job is bad
+    if values.null_count:
+        raise ValueError(
+            f"bad realizations for location: {location}, imt: {imt}: "
+            f"{values.null_count} component branches have no probabilities"
+        )
+    flat = values.flatten()
+    if flat.null_count:
+        raise ValueError(f"bad realizations for location: {location}, imt: {imt}: {flat.null_count} null probabilities")
+    # the reshape would succeed, mixing values across rows, whenever the total happens to divide evenly
+    lengths = values.value_lengths().to_numpy()
+    if len(lengths) and lengths.min() != lengths.max():
+        raise ValueError(
+            f"bad realizations for location: {location}, imt: {imt}: component branches have "
+            f"from {lengths.min()} to {lengths.max()} probabilities"
+        )
+    return flat.to_numpy().reshape(n_components, -1)
 
 
 def save_aggregations(
@@ -197,7 +272,7 @@ def save_aggregations(
                 values=hazard[i, :],
             )
 
-    agg_dir, filesystem = pyarrow_dataset.configure_output(AGG_DIR)
+    agg_dir, filesystem = resolve_target(str(AGG_DIR))
     partitioning = ['vs30', 'imt', 'nloc_001']
     pyarrow_aggr_dataset.append_models_to_dataset(
         models=generate_models(), base_dir=agg_dir, filesystem=filesystem, partitioning=partitioning
@@ -225,7 +300,7 @@ def get_realizations_dataset(
         rlz_dir_tmp += f"/vs30={vs30}"
         if nloc_0 is not None:
             rlz_dir_tmp += f"/nloc_0={nloc_0}"
-    rlz_dir, filesystem = pyarrow_dataset.configure_output(rlz_dir_tmp)
+    rlz_dir, filesystem = resolve_target(rlz_dir_tmp)
 
     t0 = time.monotonic()
     dataset = ds.dataset(rlz_dir, format='parquet', filesystem=filesystem, partitioning='hive')

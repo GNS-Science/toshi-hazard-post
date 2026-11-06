@@ -6,11 +6,9 @@ import time
 from collections.abc import Sequence
 from dataclasses import dataclass
 from multiprocessing import shared_memory
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 import numpy as np
-import pyarrow.orc as orc
 
 import toshi_hazard_post.calculators as calculators
 import toshi_hazard_post.constants as constants
@@ -18,7 +16,6 @@ from toshi_hazard_post.data import save_aggregations
 
 if TYPE_CHECKING:
     import numpy.typing as npt
-    import pandas as pd
     from nzshm_common.location import CodedLocation
 
 log = logging.getLogger(__name__)
@@ -34,13 +31,21 @@ class AggTaskArgs:
         location: the site locaiton.
         vs30: the site vs30.
         imt: the intensity measure type.
-        table_filepath: the location of the realization data ORC format file.
+        probs: the realization probabilities with shape (n component branches, n IMTL), where row i is for the
+            component branch at position i of the branch index table.
     """
 
     location: 'CodedLocation'
     vs30: int
     imt: str
-    table_filepath: Path
+    probs: 'npt.NDArray'
+
+    def __repr__(self) -> str:
+        # failed tasks are logged with their arguments, so leave out the data
+        return (
+            f"AggTaskArgs(location={self.location.code}, vs30={self.vs30}, imt={self.imt}, "
+            f"probs={self.probs.shape} {self.probs.dtype})"
+        )
 
 
 @dataclass
@@ -54,8 +59,6 @@ class AggSharedArgs:
         weights_shape: the shape of the weights array.
         branch_index_table_shape: the shape of the branch index table array.
         branch_index_table_dtype: the data type of the branch index table array.
-        component_digests: the hash digests of the component branches, in the order indexed by the
-            branch index table.
         skip_save: set to True if skipping saving the aggregations. Used when debugging to avoid writing to a database.
     """
 
@@ -65,37 +68,7 @@ class AggSharedArgs:
     weights_shape: tuple[int, ...]
     branch_index_table_shape: tuple[int, ...]
     branch_index_table_dtype: str
-    component_digests: list[str]
     skip_save: bool
-
-
-def convert_probs_to_rates(probs: 'pd.DataFrame') -> 'pd.DataFrame':
-    """Convert probabilies to rates assuming probabilies are Poissonian.
-
-    The 'values' column in the input dataframe will be used to calculate rates assuming they are probabilities
-    in one year. The output dataframe will have a 'rates' column.
-
-    Args:
-        probs: the probabilities dataframe.
-
-    Returns:
-        the rates dataframe.
-    """
-    probs['rates'] = probs['values'].apply(calculators.prob_to_rate, inv_time=1.0)
-    return probs.drop('values', axis=1)
-
-
-def load_realizations(filepath: Path) -> 'pd.DataFrame':
-    """Load the realizations from an Appache ORC format file.
-
-    Args:
-        filepath: the path of the ORC file.
-
-    Returns:
-        The realization data.
-    """
-    data_table = orc.read_table(filepath)
-    return data_table.to_pandas()
 
 
 def calculate_aggs(branch_rates: 'npt.NDArray', weights: 'npt.NDArray', agg_types: Sequence[str]) -> 'npt.NDArray':
@@ -177,36 +150,6 @@ def build_branch_rates(branch_index_table: 'npt.NDArray', component_rates: 'npt.
     return calculators.composite_rates(branch_index_table, component_rates)
 
 
-def create_component_array(component_rates: 'pd.DataFrame', component_digests: Sequence[str]) -> 'npt.NDArray':
-    """Convert component branch rates DataFrame to an array ordered by component branch.
-
-    The digest of each row is constructed by concatenating sources digest and gmms digest.
-
-    Args:
-        component_rates: data frame with the component branch rates.
-        component_digests: the hash digests of the component branches, in the order wanted for the array.
-
-    Returns:
-        The rates with shape (n component branches, n IMTL), where row i is for component_digests[i].
-
-    Raises:
-        KeyError: if the digests of the data frame are not exactly the component digests.
-    """
-    digests = (component_rates['sources_digest'] + component_rates['gmms_digest']).to_list()
-    row = {digest: i for i, digest in enumerate(digests)}
-    missing = [digest for digest in component_digests if digest not in row]
-    if missing or len(digests) != len(component_digests):
-        # every task of a bad run fails the same way, so keep the message short
-        n_unexpected = len(digests) - (len(component_digests) - len(missing))
-        raise KeyError(
-            f"expected rates for {len(component_digests)} component branches, got {len(digests)}: "
-            f"{len(missing)} component branches have no rates (first {missing[:5]}), "
-            f"{n_unexpected} rates are duplicates or not for a component branch"
-        )
-    order = [row[digest] for digest in component_digests]
-    return np.stack(component_rates['rates'].to_numpy())[order]
-
-
 def calc_aggregation(task_args: AggTaskArgs, shared_args: AggSharedArgs) -> None:
     """Calculate hazard aggregation for a single site and imt and save result.
 
@@ -235,31 +178,22 @@ def calc_aggregation(task_args: AggTaskArgs, shared_args: AggSharedArgs) -> None
     weights_shm = shared_memory.SharedMemory(name=constants.WEIGHTS_SHM_NAME)
     weights: npt.NDArray = np.ndarray(shared_args.weights_shape, dtype=np.float64, buffer=weights_shm.buf)
 
-    log.info("worker %s: loading realizations from %s. . .", worker_name, task_args.table_filepath)
-    component_probs = load_realizations(task_args.table_filepath)
-    log.debug("worker %s: %s rlz_table ", worker_name, component_probs.shape)
-
     # convert probabilities to rates
     time1 = time.perf_counter()
-    component_rates = convert_probs_to_rates(component_probs)
-    del component_probs
+    component_rates_array = calculators.prob_to_rate(task_args.probs, 1.0)
     time2 = time.perf_counter()
-    log.debug("worker %s: time to convert_probs_to_rates() %0.2f", worker_name, time2 - time1)
+    log.debug("worker %s: time to convert probabilities to rates %0.2f seconds", worker_name, time2 - time1)
 
-    component_rates_array = create_component_array(component_rates, shared_args.component_digests)
-
-    time3 = time.perf_counter()
-    log.debug("worker %s: time to order rates by component branch %0.2f seconds", worker_name, time3 - time2)
     log.debug('worker %s: rates_table %s', worker_name, component_rates_array.shape)
 
     composite_rates = build_branch_rates(branch_index_table, component_rates_array)
-    time4 = time.perf_counter()
-    log.debug("worker %s: time to build_ranch_rates %0.2f seconds", worker_name, time4 - time3)
+    time3 = time.perf_counter()
+    log.debug("worker %s: time to build_branch_rates %0.2f seconds", worker_name, time3 - time2)
 
     log.info("worker %s:  calculating aggregates . . . ", worker_name)
     hazard = calculate_aggs(composite_rates, weights, agg_types)
-    time5 = time.perf_counter()
-    log.debug("worker %s: time to calculate aggs %0.2f seconds", worker_name, time5 - time4)
+    time4 = time.perf_counter()
+    log.debug("worker %s: time to calculate aggs %0.2f seconds", worker_name, time4 - time3)
 
     probs = calculators.rate_to_prob(hazard, 1.0)
     if shared_args.skip_save:
@@ -267,6 +201,5 @@ def calc_aggregation(task_args: AggTaskArgs, shared_args: AggSharedArgs) -> None
     else:
         log.info("worker %s saving result . . . ", worker_name)
         save_aggregations(probs, location, vs30, imt, agg_types, hazard_model_id, compatibility_key)
-    task_args.table_filepath.unlink()
-    time6 = time.perf_counter()
-    log.info("worker %s time to perform one aggregation %0.2f seconds", worker_name, time6 - time0)
+    time5 = time.perf_counter()
+    log.info("worker %s time to perform one aggregation %0.2f seconds", worker_name, time5 - time0)

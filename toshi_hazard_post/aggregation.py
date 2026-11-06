@@ -3,14 +3,13 @@
 import itertools
 import logging
 import time
-from collections.abc import Generator
-from concurrent.futures import Executor, ProcessPoolExecutor, as_completed
+from collections.abc import Callable, Generator, Iterable
+from concurrent.futures import FIRST_COMPLETED, Executor, Future, ProcessPoolExecutor, wait
 from multiprocessing import shared_memory
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 import numpy as np
-import pyarrow.orc as orc
+import pyarrow as pa
 from nzshm_common.location.coded_location import bin_locations
 
 import toshi_hazard_post.calculators as calculators
@@ -18,13 +17,18 @@ import toshi_hazard_post.constants as constants
 from toshi_hazard_post.aggregation_args import AggregationArgs
 from toshi_hazard_post.aggregation_calc import AggSharedArgs, AggTaskArgs, calc_aggregation
 from toshi_hazard_post.aggregation_setup import Site, get_logic_trees, get_sites
-from toshi_hazard_post.data import get_batch_table, get_job_datatable, get_realizations_dataset, group_batch_rows
-from toshi_hazard_post.local_config import NUM_WORKERS, WORKING_DIR
+from toshi_hazard_post.data import (
+    component_row_ids,
+    get_batch_table,
+    get_job_probs,
+    get_realizations_dataset,
+    group_batch_rows,
+)
+from toshi_hazard_post.local_config import NUM_WORKERS
 from toshi_hazard_post.logic_tree import HazardLogicTree, build_branch_index_table
 
 if TYPE_CHECKING:
     import numpy.typing as npt
-    from nzshm_common.location import CodedLocation
 
     from toshi_hazard_post.logic_tree import HazardComponentBranch
 
@@ -34,16 +38,37 @@ log = logging.getLogger(__name__)
 PARTITION_RESOLUTION = 1.0
 
 
+def _load_batch(
+    vs30: int,
+    nloc_0: str,
+    compatibility_key: str,
+    sources_digests: list[str],
+    gmms_digests: list[str],
+    imts: list[str],
+    component_digests: list[str],
+) -> tuple[pa.Table, dict[tuple[str, str], 'npt.NDArray'], 'npt.NDArray']:
+    """Load the realizations of one vs30 and 1 degree location bin, and find the rows and component branches."""
+    log.debug("loading batch %d, %s", vs30, nloc_0)
+    t0 = time.perf_counter()
+    dataset = get_realizations_dataset(vs30, nloc_0)
+    batch_datatable = get_batch_table(dataset, compatibility_key, sources_digests, gmms_digests, vs30, nloc_0, imts)
+    job_rows = group_batch_rows(batch_datatable)
+    component_ids = component_row_ids(batch_datatable, component_digests)
+    log.debug("loaded batch %d, %s in %0.1f seconds", vs30, nloc_0, time.perf_counter() - t0)
+    return batch_datatable, job_rows, component_ids
+
+
 def _generate_agg_jobs(
     sites: list[Site],
     imts: list[str],
     compatibility_key: str,
     component_branches: list['HazardComponentBranch'],
-) -> Generator[tuple[int, 'CodedLocation', str, Path], None, None]:
+) -> Generator[AggTaskArgs, None, None]:
 
     gmms_digests = [branch.gmcm_hash_digest for branch in component_branches]
     sources_digests = [branch.source_hash_digest for branch in component_branches]
-    n_expected = len(component_branches)
+    # the order of the branch index table, which the workers use to find the rates of each component branch
+    component_digests = [branch.hash_digest for branch in component_branches]
 
     # group locations by vs30
     vs30s_unique = set([site.vs30 for site in sites])
@@ -53,21 +78,51 @@ def _generate_agg_jobs(
         locations = [site.location for site in sites if site.vs30 == vs30]
         location_bins = bin_locations(locations, PARTITION_RESOLUTION)
         for nloc_0, location_bin in location_bins.items():
-            dataset = get_realizations_dataset(vs30, nloc_0)
-            log.info("batch %d, %s", vs30, nloc_0)
-            batch_datatable = get_batch_table(
-                dataset, compatibility_key, sources_digests, gmms_digests, vs30, nloc_0, imts
+            batch_datatable, job_rows, component_ids = _load_batch(
+                vs30, nloc_0, compatibility_key, sources_digests, gmms_digests, imts, component_digests
             )
-            job_rows = group_batch_rows(batch_datatable)
+            log.info("batch %d, %s", vs30, nloc_0)
             for location, imt in itertools.product(location_bin.locations, imts):
-                job_datatable = get_job_datatable(batch_datatable, job_rows, location, imt, n_expected)
-                filepath = Path(WORKING_DIR) / f"{vs30}_{nloc_0}_{location.downsample(0.001).code}_{imt}_dataset.dat"
-                log.debug("writing file %s for agg job %s, %s", filepath, location.code, imt)
-                t0 = time.perf_counter()
-                orc.write_table(job_datatable, filepath, compression='snappy')
-                t1 = time.perf_counter()
-                log.debug("time to write data: %0.5f seconds" % (t1 - t0))
-                yield vs30, location, imt, filepath
+                probs = get_job_probs(batch_datatable, job_rows, component_ids, component_digests, location, imt)
+                yield AggTaskArgs(location=location, vs30=vs30, imt=imt, probs=probs)
+            # drop this batch before the next is loaded, so that only one is held at a time
+            del batch_datatable, job_rows, component_ids
+
+
+def _run_tasks(
+    executor: Executor,
+    fn: Callable[[AggTaskArgs, AggSharedArgs], None],
+    tasks: Iterable[AggTaskArgs],
+    shared_args: AggSharedArgs,
+    max_in_flight: int,
+) -> tuple[int, int]:
+    """Run fn on every task, with no more than max_in_flight tasks submitted and not yet finished.
+
+    Each submitted task holds its data in this process until it runs, so the cap bounds that memory, and also
+    stops the tasks being generated (and their batches loaded) far ahead of the workers.
+
+    Returns:
+        The number of tasks and the number that failed.
+    """
+    num_jobs = 0
+    num_failed = 0
+    pending: dict[Future, AggTaskArgs] = {}
+
+    def collect(done: set[Future]) -> None:
+        nonlocal num_failed
+        for future in done:
+            task_args = pending.pop(future)
+            if exception := future.exception():
+                num_failed += 1
+                log.error("Exception encountered for task args %s: %r", task_args, exception)
+
+    for task_args in tasks:
+        if len(pending) >= max_in_flight:
+            collect(wait(pending, return_when=FIRST_COMPLETED).done)
+        pending[executor.submit(fn, task_args, shared_args)] = task_args
+        num_jobs += 1
+    collect(wait(pending).done)
+    return num_jobs, num_failed
 
 
 def run_aggregation(args: AggregationArgs, pool_executor: Executor | None = None) -> None:
@@ -76,7 +131,8 @@ def run_aggregation(args: AggregationArgs, pool_executor: Executor | None = None
     Args:
         args: the aggregation configuration
         pool_executor: the Executor (e.g. ProcessPoolExecutor) to use for launching the parallel tasks. If
-            none given, ProcessPoolExecutor(max_workers=NUM_WORKERS) is used
+            none given, ProcessPoolExecutor(max_workers=NUM_WORKERS) is used. Either way, at most
+            2 * NUM_WORKERS tasks are in flight, whatever the executor's own number of workers.
     """
     time0 = time.perf_counter()
     # get the sites
@@ -136,7 +192,6 @@ def run_aggregation(args: AggregationArgs, pool_executor: Executor | None = None
         weights_shape=weights.shape,
         branch_index_table_shape=branch_index_table.shape,
         branch_index_table_dtype=branch_index_table.dtype.str,
-        component_digests=component_digests,
         agg_types=agg_types,
         hazard_model_id=args.general.hazard_model_id,
         compatibility_key=args.general.compatibility_key,
@@ -144,37 +199,14 @@ def run_aggregation(args: AggregationArgs, pool_executor: Executor | None = None
     )
 
     time_parallel_start = time.perf_counter()
-    num_jobs = 0
     log.info("starting %d calculations with %d workers", len(sites) * len(imts), NUM_WORKERS)
 
-    futures = {}
-    # ds1 = get_realizations_dataset()
     # compile before the workers are started so that they do not each compile for their first task
     calculators.warm_up()
     pool_executor = pool_executor or ProcessPoolExecutor(max_workers=NUM_WORKERS)
     with pool_executor as executor:
-        for vs30, location, imt, filepath in _generate_agg_jobs(
-            sites,
-            imts,
-            args.general.compatibility_key,
-            component_branches,
-            # ds1,
-        ):
-            task_args = AggTaskArgs(
-                location=location,
-                vs30=vs30,
-                imt=imt,
-                table_filepath=filepath,
-            )
-            future = executor.submit(calc_aggregation, task_args, shared_args)
-            futures[future] = task_args
-            num_jobs += 1
-
-        num_failed = 0
-        for future in as_completed(futures.keys()):
-            if exception := future.exception():
-                num_failed += 1
-                log.error("Exception encountered for task args %s: %r", futures[future], exception)
+        tasks = _generate_agg_jobs(sites, imts, args.general.compatibility_key, component_branches)
+        num_jobs, num_failed = _run_tasks(executor, calc_aggregation, tasks, shared_args, 2 * NUM_WORKERS)
 
     time_parallel_end = time.perf_counter()
     branch_index_table_shm.close()

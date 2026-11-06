@@ -27,7 +27,7 @@ Version is derived from the git tag by hatch-vcs; `toshi_hazard_post/_version.py
 thp aggregate demo/hazard_mini.toml     # or: uv run thp aggregate ...
 ```
 
-Runtime config comes from env vars, or a `.env` file (override the path with `THP_ENV_FILE`): `THP_RLZ_DIR` and `THP_AGG_DIR` (local path or `s3://` URI), `THP_NUM_WORKERS`, `THP_WORKING_DIR`. The calculation itself is described by a TOML input file — see `docs/usage.md` and the `demo/` directory.
+Runtime config comes from env vars, or a `.env` file (override the path with `THP_ENV_FILE`): `THP_RLZ_DIR` and `THP_AGG_DIR` (local path or `s3://` URI), `THP_NUM_WORKERS`. The calculation itself is described by a TOML input file — see `docs/usage.md` and the `demo/` directory.
 
 **Gotcha:** `local_config.py` reads the environment once at import time into module-level constants, and consumers do `from ... import AGG_DIR`, binding the value at *their* import time. Setting an env var after import has no effect. Tests monkeypatch the consuming module's attribute instead (`monkeypatch.setattr(toshi_hazard_post.data, 'AGG_DIR', ...)`).
 
@@ -37,9 +37,9 @@ A hazard curve is aggregated from pre-computed *realizations* held in an externa
 
 ### Hash digests are the join key
 
-This is the central idea and it spans `logic_tree.py`, `data.py`, and `aggregation_calc.py`. Every branch has a `registry_identity` string; its `identity_digest` is the primary key used to find that branch's realization rows in the dataset. `HazardComponentBranch.hash_digest` is `sources_digest + gmms_digest` concatenated, and the same concatenation is rebuilt from dataset columns in `create_component_array()`. If digests don't line up, nothing matches.
+This is the central idea and it spans `logic_tree.py`, `data.py`, and `aggregation_calc.py`. Every branch has a `registry_identity` string; its `identity_digest` is the primary key used to find that branch's realization rows in the dataset. `HazardComponentBranch.hash_digest` is `sources_digest + gmms_digest` concatenated, and the same concatenation is rebuilt from dataset columns in `data.component_row_ids()`. If digests don't line up, nothing matches.
 
-Digests are *computed*, not looked up: `nzshm_model`'s branch registry is advisory only, so an unregistered branch still gets a valid digest and only warns (`_branch_hash_digest` in `logic_tree.py`, memoised). The practical consequence is that a mistyped toshi id no longer fails fast — it produces a well-formed digest that matches nothing, and the run dies much later in `get_job_datatable` with `incorrect number of records found`. That warning is the clue.
+Digests are *computed*, not looked up: `nzshm_model`'s branch registry is advisory only, so an unregistered branch still gets a valid digest and only warns (`_branch_hash_digest` in `logic_tree.py`, memoised). The practical consequence is that a mistyped toshi id no longer fails fast — it produces a well-formed digest that matches nothing, and the run stops in the parent at its first job, in `data.get_job_probs`, with `incorrect number of records found` or `expected rates for N component branches`. That warning is the clue.
 
 ### Component vs composite branches
 
@@ -57,9 +57,9 @@ Rates are additive, probabilities are not — hence the prob→rate→aggregate�
 `cli.py` → `aggregation.run_aggregation()` is the orchestrator:
 
 1. Resolve sites and logic trees (`aggregation_setup.py`), build `HazardLogicTree`.
-2. Compute `weights` and `branch_hash_table`, convert the hash table to a table of integer indices into `component_branches` (`build_branch_index_table` in `logic_tree.py`), and copy the weights and index table into **named shared memory** so worker processes read them without pickling (names in `constants.py`). Workers order each job's rates by the same component index, so composite rates are summed by position rather than by digest lookup.
-3. `_generate_agg_jobs()` batches work by `(vs30, nloc_0)` — a 1° location bin — so the parquet dataset is scanned once per batch rather than per site. Each batch is sliced per `(location, imt)` and written as an ORC file to `WORKING_DIR`.
-4. Each ORC file becomes one task on a `ProcessPoolExecutor`; `aggregation_calc.calc_aggregation()` loads it, converts to rates, sums into composite rates via the shared index table (laid out level-major, `(IMTL, composite branch)`), computes weighted aggregates, converts back to probabilities, saves, and deletes its ORC file.
+2. Compute `weights` and `branch_hash_table`, convert the hash table to a table of integer indices into `component_branches` (`build_branch_index_table` in `logic_tree.py`), and copy the weights and index table into **named shared memory** so worker processes read them without pickling (names in `constants.py`). Each job's probabilities are ordered by the same component index in the parent, so composite rates are summed by position rather than by digest lookup.
+3. `_generate_agg_jobs()` batches work by `(vs30, nloc_0)` — a 1° location bin — so the parquet dataset is scanned once per batch rather than per site. Batches are loaded one at a time in the parent, sharing one `S3FileSystem` per process (`data.resolve_target`). Each batch is sliced per `(location, imt)` into a `(component branch, IMTL)` probability array, ordered by the same component index as the shared index table (`data.get_job_probs`).
+4. Each array is passed to its task in `AggTaskArgs.probs` on a `ProcessPoolExecutor`, with at most `2 * THP_NUM_WORKERS` tasks in flight (`_run_tasks`). `aggregation_calc.calc_aggregation()` converts to rates, sums into composite rates via the shared index table (laid out level-major, `(IMTL, composite branch)`), computes weighted aggregates, converts back to probabilities, and saves.
 
 Because the shared memory segments have fixed names and are created with `create=True` and unlinked without a `try/finally`, a crashed run leaves them behind and the next run fails with `FileExistsError`. Two concurrent runs on one machine collide for the same reason.
 
