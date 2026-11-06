@@ -190,7 +190,7 @@ def get_job_probs(
 
     Raises:
         KeyError: if the job's rows are not exactly one for each component branch.
-        ValueError: if any of the job's rows or probabilities are null.
+        ValueError: if any of the job's rows or probabilities are null, or the rows differ in length.
     """
     rows = job_rows.get((location.downsample(0.001).code, imt))
     if rows is None:
@@ -226,6 +226,13 @@ def get_job_probs(
     flat = values.flatten()
     if flat.null_count:
         raise ValueError(f"bad realizations for location: {location}, imt: {imt}: {flat.null_count} null probabilities")
+    # the reshape would succeed, mixing values across rows, whenever the total happens to divide evenly
+    lengths = values.value_lengths().to_numpy()
+    if len(lengths) and lengths.min() != lengths.max():
+        raise ValueError(
+            f"bad realizations for location: {location}, imt: {imt}: component branches have "
+            f"from {lengths.min()} to {lengths.max()} probabilities"
+        )
     return flat.to_numpy().reshape(n_components, -1)
 
 

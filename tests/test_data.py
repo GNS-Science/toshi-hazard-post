@@ -300,3 +300,16 @@ def test_job_probs_nulls_in_other_jobs_are_ignored():
     )
     probs = job_probs(pa.concat_tables([job, other]), LOCATIONS[0], "PGA")
     assert probs.shape == (N_BRANCHES, 2)
+
+
+@pytest.mark.parametrize(
+    "values",
+    [
+        [[0.1, 0.2, 0.3], [0.4], [0.5, 0.6], [0.7, 0.8]],  # 8 values, so a reshape to 4 rows would succeed
+        [[0.1, 0.2, 0.3], [0.4, 0.5], [0.6, 0.7], [0.8, 0.9]],
+    ],
+    ids=["divides evenly", "does not divide"],
+)
+def test_job_probs_rows_of_different_lengths(values):
+    with pytest.raises(ValueError, match=r"PGA.*from 1 to 3|PGA.*from 2 to 3"):
+        job_probs(single_job_table(COMPONENT_PAIRS, values), LOCATIONS[0], "PGA")
