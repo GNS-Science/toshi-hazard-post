@@ -53,6 +53,10 @@
 - A `debug.restart` weights file that is not float64 is converted to float64 when loaded. Before, the workers read
   it as float64 regardless: a float32 file made every task fail with `buffer is too small`, and an integer file of
   the same size would have given wrong aggregates.
+- The parent process releases the logic tree, with its cached composite branches, once the weights and branch index
+  table are built, instead of holding it for the whole run. For NSHM_v1.0.4 this frees about 1.15 GB of parent memory
+  (1267 MB to 105 MB RSS) while batches are loaded.
+  ([#110](https://github.com/GNS-Science/toshi-hazard-post/issues/110))
 
 ### Removed
 - `aggregation_calc.calc_composite_rates` and `aggregation_calc.create_component_dict`.
