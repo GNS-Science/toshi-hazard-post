@@ -4,6 +4,7 @@ from concurrent.futures import ThreadPoolExecutor
 from itertools import product
 
 import numpy as np
+import pytest
 from nzshm_common.location.coded_location import CodedLocation
 
 import toshi_hazard_post.aggregation as aggregation
@@ -73,6 +74,8 @@ def shared_args() -> AggSharedArgs:
         weights_shape=(1,),
         branch_index_table_shape=(1, 1),
         branch_index_table_dtype="<u2",
+        weights_shm_name="weights",
+        branch_index_table_shm_name="index",
         skip_save=True,
     )
 
@@ -118,3 +121,27 @@ def test_run_tasks_counts_and_logs_failures(caplog):
     errors = [record for record in caplog.records if "Exception encountered" in record.getMessage()]
     assert len(errors) == 3
     assert all(len(record.getMessage()) < 500 for record in errors)
+
+
+def test_run_tasks_logs_failed_tasks_when_the_tasks_stop_with_an_error(caplog):
+    finished = threading.Semaphore(0)
+
+    def fn(task_args: AggTaskArgs, shared: AggSharedArgs) -> None:
+        try:
+            raise ValueError("bad task")
+        finally:
+            finished.release()
+
+    def tasks():
+        for i in range(3):
+            yield task(i)
+        for _ in range(3):  # let every task fail before the error, so that none is collected by the cap
+            finished.acquire()
+        raise RuntimeError("bad batch")
+
+    with ThreadPoolExecutor(2) as executor:
+        with pytest.raises(RuntimeError, match="bad batch"):
+            _run_tasks(executor, fn, tasks(), shared_args(), max_in_flight=10)
+    errors = [record for record in caplog.records if "Exception encountered" in record.getMessage()]
+    assert len(errors) == 3
+    assert "3 tasks submitted, 3 failed" in caplog.text

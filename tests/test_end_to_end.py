@@ -10,6 +10,8 @@ from toshi_hazard_store.model.pyarrow import pyarrow_dataset
 import toshi_hazard_post.data
 from toshi_hazard_post.aggregation import run_aggregation
 from toshi_hazard_post.aggregation_args import load_input_args
+from toshi_hazard_post.aggregation_setup import get_logic_trees
+from toshi_hazard_post.logic_tree import HazardLogicTree
 
 fixture_dir = resources.files('tests.fixtures.end_to_end')
 args_filepath = fixture_dir / 'hazard.toml'
@@ -29,12 +31,38 @@ def test_end_to_end(monkeypatch, tmp_path):
     # instead of fork
     run_aggregation(agg_args, ThreadPoolExecutor())
 
-    # read the aggregation back out and compare
-    rlz_dir, filesystem = pyarrow_dataset.configure_output(str(tmp_path))
-    dataset = ds.dataset(rlz_dir, format="parquet", filesystem=filesystem, partitioning="hive")
-    probs = np.stack(ds.Scanner.from_dataset(dataset).to_table().to_pandas()['values'].values)
+    np.testing.assert_allclose(read_aggregations(tmp_path), probs_expected, rtol=1e-07, atol=1e-08)
 
-    np.testing.assert_allclose(probs, probs_expected, rtol=1e-07, atol=1e-08)
+
+def read_aggregations(agg_dir: Path) -> np.ndarray:
+    rlz_dir, filesystem = pyarrow_dataset.configure_output(str(agg_dir))
+    dataset = ds.dataset(rlz_dir, format="parquet", filesystem=filesystem, partitioning="hive")
+    return np.stack(ds.Scanner.from_dataset(dataset).to_table().to_pandas()['values'].values)
+
+
+def test_restart_with_float32_weights(monkeypatch, tmp_path):
+    agg_dir = tmp_path / 'agg'
+    monkeypatch.setattr(toshi_hazard_post.data, 'AGG_DIR', str(agg_dir))
+    monkeypatch.setattr(toshi_hazard_post.data, 'RLZ_DIR', str(Path(__file__).parent / 'fixtures/end_to_end/rlz'))
+
+    agg_args = load_input_args(args_filepath)
+    logic_tree = HazardLogicTree(
+        *get_logic_trees(
+            agg_args.hazard_model.nshm_model_version,
+            agg_args.hazard_model.srm_logic_tree,
+            agg_args.hazard_model.gmcm_logic_tree,
+        )
+    )
+    bht_filepath = tmp_path / 'bht.npy'
+    weights_filepath = tmp_path / 'weights.npy'
+    np.save(bht_filepath, np.array(logic_tree.branch_hash_table))
+    np.save(weights_filepath, logic_tree.weights.astype(np.float32))
+    agg_args.debug.restart = (bht_filepath, weights_filepath)
+
+    run_aggregation(agg_args, ThreadPoolExecutor())
+
+    # float32 weights carry about 7 significant digits
+    np.testing.assert_allclose(read_aggregations(agg_dir), np.load(aggs_expected_filepath), rtol=1e-06, atol=1e-08)
 
 
 def test_restart_files_must_match(tmp_path):

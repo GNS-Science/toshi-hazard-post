@@ -11,7 +11,6 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 import toshi_hazard_post.calculators as calculators
-import toshi_hazard_post.constants as constants
 from toshi_hazard_post.data import save_aggregations
 
 if TYPE_CHECKING:
@@ -59,6 +58,8 @@ class AggSharedArgs:
         weights_shape: the shape of the weights array.
         branch_index_table_shape: the shape of the branch index table array.
         branch_index_table_dtype: the data type of the branch index table array.
+        weights_shm_name: the name of the shared memory segment holding the weights.
+        branch_index_table_shm_name: the name of the shared memory segment holding the branch index table.
         skip_save: set to True if skipping saving the aggregations. Used when debugging to avoid writing to a database.
     """
 
@@ -68,6 +69,8 @@ class AggSharedArgs:
     weights_shape: tuple[int, ...]
     branch_index_table_shape: tuple[int, ...]
     branch_index_table_dtype: str
+    weights_shm_name: str
+    branch_index_table_shm_name: str
     skip_save: bool
 
 
@@ -168,14 +171,16 @@ def calc_aggregation(task_args: AggTaskArgs, shared_args: AggSharedArgs) -> None
     compatibility_key = shared_args.compatibility_key
     hazard_model_id = shared_args.hazard_model_id
 
-    branch_index_table_shm = shared_memory.SharedMemory(name=constants.BRANCH_INDEX_TABLE_SHM_NAME)
+    # the arrays below point into the shared memory but do not keep it mapped: never close() these
+    # SharedMemory objects while the arrays are alive, or reading them segfaults
+    branch_index_table_shm = shared_memory.SharedMemory(name=shared_args.branch_index_table_shm_name)
     branch_index_table: npt.NDArray = np.ndarray(
         shared_args.branch_index_table_shape,
         dtype=shared_args.branch_index_table_dtype,
         buffer=branch_index_table_shm.buf,
     )
 
-    weights_shm = shared_memory.SharedMemory(name=constants.WEIGHTS_SHM_NAME)
+    weights_shm = shared_memory.SharedMemory(name=shared_args.weights_shm_name)
     weights: npt.NDArray = np.ndarray(shared_args.weights_shape, dtype=np.float64, buffer=weights_shm.buf)
 
     # convert probabilities to rates
