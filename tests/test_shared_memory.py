@@ -115,8 +115,9 @@ def test_worker_crash_removes_the_shared_memory(monkeypatch, agg_args, created_n
 
     # a submit after the worker dies raises; the cap of 2 tasks in flight makes sure there is one
     with pytest.raises(BrokenProcessPool):
-        # forkserver rather than fork: the test process may have threads running
-        run_aggregation(agg_args, ProcessPoolExecutor(1, mp_context=multiprocessing.get_context('forkserver')))
+        # forkserver rather than fork: the test process may have threads running. Windows has only spawn.
+        method = 'forkserver' if 'forkserver' in multiprocessing.get_all_start_methods() else 'spawn'
+        run_aggregation(agg_args, ProcessPoolExecutor(1, mp_context=multiprocessing.get_context(method)))
 
     assert len(created_names) == 2
     assert not any(exists(name) for name in created_names)
