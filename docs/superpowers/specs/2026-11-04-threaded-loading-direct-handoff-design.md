@@ -1,5 +1,7 @@
 # Threaded batch loading and direct job hand-off (#100 item 7, #97)
 
+> **Status:** the threaded loading described here was removed before release. Loading ahead gave no speedup in real runs, because the workers are the bottleneck (#107), and it forked workers while load threads were running. Batches are loaded one at a time in the parent, and `THP_NUM_LOAD_THREADS` no longer exists; its default had already been changed from 4 to 1 (f7cdf7b), then the whole feature was removed (04f956e). The direct hand-off of job arrays, the cap on tasks in flight and the one S3 filesystem per process are still in place.
+
 ## Why
 
 After phase 1 of #100, a `(location, imt)` task takes ~0.55 s, and the parent's serial job preparation sets how many workers can be kept busy. Two costs dominate, measured on 8 bins at vs30=400 (12,656 jobs, see the item 6 comment on #100):

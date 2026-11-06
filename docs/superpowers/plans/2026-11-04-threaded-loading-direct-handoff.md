@@ -1,5 +1,7 @@
 # Threaded batch loading and direct job hand-off: implementation plan
 
+> **Status:** the threaded loading described here was removed before release. Loading ahead gave no speedup in real runs, because the workers are the bottleneck (#107), and it forked workers while load threads were running. Batches are loaded one at a time in the parent, and `THP_NUM_LOAD_THREADS` no longer exists; its default had already been changed from 4 to 1 (f7cdf7b), then the whole feature was removed (04f956e). The direct hand-off of job arrays, the cap on tasks in flight and the one S3 filesystem per process are still in place.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** The parent loads up to K bins at once in threads, reusing one S3 filesystem, and hands each job's data to its worker as an array ordered by component index, with at most 2 × workers tasks in flight. The ORC round trip is gone. Output stays bit-identical to `main`.
