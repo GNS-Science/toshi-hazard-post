@@ -40,6 +40,8 @@
 - `aggregation_calc.calculate_aggs` takes composite rates with shape (IMTL, branch) rather than (branch, IMTL).
 - The error raised when a job's realizations do not match the component branches reports counts and the first few
   missing digests rather than every digest.
+- `aggregation_calc.AggSharedArgs` has the names of the shared memory segments in the new required fields
+  `weights_shm_name` and `branch_index_table_shm_name`. New `constants.SHM_NAME_PREFIX` starts each name.
 
 ### Fixed
 - The shared memory segments holding the weights and branch index table are removed however a run ends, so a run
@@ -48,8 +50,6 @@
   `SIGTERM` or `SIGKILL` leaves its pool workers running, and they keep its segments in `/dev/shm` until they are
   killed. When a run stops with an error, the tasks that had already failed are logged first.
   ([#105](https://github.com/GNS-Science/toshi-hazard-post/issues/105))
-- `aggregation_calc.AggSharedArgs` has the segment names in `weights_shm_name` and `branch_index_table_shm_name`;
-  `constants.WEIGHTS_SHM_NAME` and `constants.BRANCH_INDEX_TABLE_SHM_NAME` are replaced by `constants.SHM_NAME_PREFIX`.
 - A `debug.restart` weights file that is not float64 is converted to float64 when loaded. Before, the workers read
   it as float64 regardless: a float32 file made every task fail with `buffer is too small`, and an integer file of
   the same size would have given wrong aggregates.
@@ -60,6 +60,7 @@
 - `data.get_job_datatable` (replaced by `data.get_job_probs` and `data.component_row_ids`),
   `aggregation_calc.convert_probs_to_rates`, `aggregation_calc.load_realizations`,
   `aggregation_calc.create_component_array` and `aggregation_calc.AggSharedArgs.component_digests`.
+- `constants.WEIGHTS_SHM_NAME` and `constants.BRANCH_INDEX_TABLE_SHM_NAME`: each run now names its own segments.
 
 ## [0.7.4] - 2026-08-17
 ### Fixed
