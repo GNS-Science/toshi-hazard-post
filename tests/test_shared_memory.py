@@ -72,6 +72,20 @@ def test_failed_run_removes_its_shared_memory(monkeypatch, agg_args, created_nam
     assert not any(exists(name) for name in created_names)
 
 
+def test_segment_removed_during_a_failed_run_keeps_the_run_error(monkeypatch, agg_args, created_names):
+    def remove_segments_and_fail(*args: object) -> None:
+        for name in created_names:
+            segment = shared_memory.SharedMemory(name=name)
+            segment.close()
+            segment.unlink()
+        raise ValueError("bad job")
+
+    monkeypatch.setattr(aggregation, 'get_job_probs', remove_segments_and_fail)
+
+    with pytest.raises(ValueError, match="bad job"):
+        run_aggregation(agg_args, ThreadPoolExecutor())
+
+
 def test_run_after_a_failed_run_succeeds(monkeypatch, agg_args, created_names):
     get_job_probs = aggregation.get_job_probs
     monkeypatch.setattr(aggregation, 'get_job_probs', fail_job)

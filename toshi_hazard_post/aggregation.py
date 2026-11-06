@@ -7,7 +7,7 @@ import secrets
 import time
 from collections.abc import Callable, Generator, Iterable, Iterator
 from concurrent.futures import FIRST_COMPLETED, Executor, Future, ProcessPoolExecutor, wait
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from multiprocessing import shared_memory
 from typing import TYPE_CHECKING
 
@@ -70,7 +70,8 @@ def _shared_array(name: str, array: 'npt.NDArray') -> Iterator[None]:
         yield
     finally:
         shm.close()
-        shm.unlink()
+        with suppress(FileNotFoundError):  # already removed, e.g. by hand
+            shm.unlink()
 
 
 def _generate_agg_jobs(
