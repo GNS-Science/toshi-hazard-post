@@ -104,7 +104,7 @@ SUM_BLOCK_SIZE = 256
 
 # The blocked sums accumulate partial sums of SUM_BLOCK_SIZE terms, which are then added together. A running
 # total is only ever added to numbers of a similar size, so the rounding error grows with the number of blocks
-# rather than with the number of terms.
+# rather than with the number of terms. weighted_avg_and_std() reduces each level in the same blocks.
 @jit(nopython=True)
 def _blocked_sum(values: 'npt.NDArray') -> float:
     """Calculate the sum of a one dimensional array."""
@@ -118,36 +118,88 @@ def _blocked_sum(values: 'npt.NDArray') -> float:
 
 
 @jit(nopython=True)
-def _blocked_weighted_sum(weights: 'npt.NDArray', values: 'npt.NDArray') -> float:
-    """Calculate the sum of weights * values for one dimensional arrays of the same length."""
-    total = 0.0
-    for start in range(0, values.shape[0], SUM_BLOCK_SIZE):
-        partial = 0.0
-        for j in range(start, min(start + SUM_BLOCK_SIZE, values.shape[0])):
-            partial += weights[j] * values[j]
-        total += partial
-    return total
+def _block_weights(weights: 'npt.NDArray') -> 'npt.NDArray':
+    """The sum of the weights in each block of SUM_BLOCK_SIZE branches."""
+    nbranches = weights.shape[0]
+    nblocks = (nbranches + SUM_BLOCK_SIZE - 1) // SUM_BLOCK_SIZE
+    block_weight = np.empty(nblocks)
+    for b in range(nblocks):
+        total = 0.0
+        for j in range(b * SUM_BLOCK_SIZE, min((b + 1) * SUM_BLOCK_SIZE, nbranches)):
+            total += weights[j]
+        block_weight[b] = total
+    return block_weight
 
 
 @jit(nopython=True)
-def _blocked_weighted_sum_sq_dev(weights: 'npt.NDArray', values: 'npt.NDArray', center: float) -> float:
-    """Calculate the sum of weights * (values - center)^2 for one dimensional arrays of the same length."""
-    total = 0.0
-    for start in range(0, values.shape[0], SUM_BLOCK_SIZE):
-        partial = 0.0
-        for j in range(start, min(start + SUM_BLOCK_SIZE, values.shape[0])):
-            deviation = values[j] - center
-            partial += weights[j] * deviation * deviation
-        total += partial
-    return total
+def _shift(values: 'npt.NDArray', weights: 'npt.NDArray', block_weight: 'npt.NDArray') -> float:
+    """A value near the weighted mean to take deviations from: the mean of the first block with weight."""
+    nbranches = values.shape[0]
+    for b in range(block_weight.shape[0]):
+        if block_weight[b] > 0.0:
+            total = 0.0
+            for j in range(b * SUM_BLOCK_SIZE, min((b + 1) * SUM_BLOCK_SIZE, nbranches)):
+                total += weights[j] * values[j]
+            return total / block_weight[b]
+    return 0.0
+
+
+# The block loops below keep 4 partial sums, so that each addition does not wait for the one before it. They are
+# inlined into weighted_avg_and_std(): called once per block, they took about a fifth longer.
+@jit(nopython=True, inline='always')
+def _block_weighted_sum(values: 'npt.NDArray', weights: 'npt.NDArray', start: int, stop: int, shift: float) -> float:
+    """The sum of weights * (values - shift) over branches start to stop."""
+    s0 = s1 = s2 = s3 = 0.0
+    j = start
+    while j + 3 < stop:
+        s0 += weights[j] * (values[j] - shift)
+        s1 += weights[j + 1] * (values[j + 1] - shift)
+        s2 += weights[j + 2] * (values[j + 2] - shift)
+        s3 += weights[j + 3] * (values[j + 3] - shift)
+        j += 4
+    while j < stop:
+        s0 += weights[j] * (values[j] - shift)
+        j += 1
+    return (s0 + s1) + (s2 + s3)
+
+
+@jit(nopython=True, inline='always')
+def _block_weighted_sum_sq_dev(
+    values: 'npt.NDArray', weights: 'npt.NDArray', start: int, stop: int, shift: float, center: float
+) -> float:
+    """The sum of weights * ((values - shift) - center)^2 over branches start to stop."""
+    s0 = s1 = s2 = s3 = 0.0
+    j = start
+    while j + 3 < stop:
+        d0 = (values[j] - shift) - center
+        d1 = (values[j + 1] - shift) - center
+        d2 = (values[j + 2] - shift) - center
+        d3 = (values[j + 3] - shift) - center
+        s0 += weights[j] * d0 * d0
+        s1 += weights[j + 1] * d1 * d1
+        s2 += weights[j + 2] * d2 * d2
+        s3 += weights[j + 3] * d3 * d3
+        j += 4
+    while j < stop:
+        d0 = (values[j] - shift) - center
+        s0 += weights[j] * d0 * d0
+        j += 1
+    return (s0 + s1) + (s2 + s3)
 
 
 @jit(nopython=True)
 def weighted_avg_and_std(values: 'npt.NDArray', weights: 'npt.NDArray') -> tuple['npt.NDArray', 'npt.NDArray']:
     """Calculate weighted average and standard deviation of an array.
 
-    Each level is reduced in two passes over its branches (the mean, then the deviations from the mean) without
-    allocating any array the size of values.
+    Each level is read from memory once, a block of SUM_BLOCK_SIZE branches at a time. While a block is in cache
+    its weighted sum and the weighted squared deviations from its own mean are found, and the blocks are then
+    combined (Chan et al.): the sum of squared deviations from the mean is the sum over the blocks of their own,
+    plus each block's weight times the squared difference between its mean and the mean. No array the size of
+    values is allocated.
+
+    The deviations are taken from a value near the mean (the mean of the first block with weight) rather than
+    from zero, and not as E[x^2] - mean^2: both lose precision when the standard deviation is much smaller than
+    the mean.
 
     Args:
         values: array of values (IMTL, branch)
@@ -161,15 +213,32 @@ def weighted_avg_and_std(values: 'npt.NDArray', weights: 'npt.NDArray') -> tuple
     if weights.shape[0] != nbranches:
         raise ValueError("weights must have one entry for each branch of values")
     sum_weights = _blocked_sum(weights)
+    block_weight = _block_weights(weights)
+    nblocks = block_weight.shape[0]
+    block_mean = np.empty(nblocks)
+    block_sq_dev = np.empty(nblocks)
     average = np.empty(nlevels)
     std = np.empty(nlevels)
     for i in range(nlevels):
-        mean = _blocked_weighted_sum(weights, values[i]) / sum_weights
-        # the deviations are taken from the mean rather than using E[x^2] - mean^2, which loses precision
-        # when the standard deviation is much smaller than the mean
-        variance = _blocked_weighted_sum_sq_dev(weights, values[i], mean) / sum_weights
-        average[i] = mean
-        std[i] = np.sqrt(variance)
+        level = values[i]
+        shift = _shift(level, weights, block_weight)
+        # the means are of the shifted values, values - shift
+        total = 0.0
+        for b in range(nblocks):
+            start = b * SUM_BLOCK_SIZE
+            stop = min(start + SUM_BLOCK_SIZE, nbranches)
+            block_total = _block_weighted_sum(level, weights, start, stop, shift)
+            total += block_total
+            mean_b = block_total / block_weight[b] if block_weight[b] > 0.0 else 0.0
+            block_mean[b] = mean_b
+            block_sq_dev[b] = _block_weighted_sum_sq_dev(level, weights, start, stop, shift, mean_b)
+        mean = total / sum_weights
+        sq_dev = 0.0
+        for b in range(nblocks):
+            difference = block_mean[b] - mean
+            sq_dev += block_sq_dev[b] + block_weight[b] * difference * difference
+        average[i] = shift + mean
+        std[i] = np.sqrt(sq_dev / sum_weights)
     return (average, std)
 
 

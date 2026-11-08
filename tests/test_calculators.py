@@ -9,9 +9,9 @@ import pytest
 import toshi_hazard_post.calculators as calculators
 from toshi_hazard_post.calculators import (
     SUM_BLOCK_SIZE,
+    _block_weighted_sum,
+    _block_weighted_sum_sq_dev,
     _blocked_sum,
-    _blocked_weighted_sum,
-    _blocked_weighted_sum_sq_dev,
     composite_rate_bounds,
     composite_rates,
     composite_rates_into,
@@ -54,6 +54,16 @@ def weights_and_values():
     values = np.array(w_and_v['values'])
     # (level, branch)
     return weights, np.vstack((values, values * 2.0))
+
+
+def fsum_mean_std(values, weights):
+    """The weighted mean and std of each level, with exactly rounded sums."""
+    sum_weights = math.fsum(weights)
+    mean = [math.fsum(weights * level) / sum_weights for level in values]
+    std = [
+        math.sqrt(math.fsum(weights * (level - m) ** 2) / sum_weights) for level, m in zip(values, mean, strict=True)
+    ]
+    return np.array(mean), np.array(std)
 
 
 # coverage cannot trace numba compiled code, so the kernels are also run as plain Python (py_func)
@@ -100,6 +110,36 @@ class TestMeanStd:
         with pytest.raises(ValueError, match="one entry for each branch"):
             func(values, np.ones(10))
 
+    def test_std_much_smaller_than_mean(self, func):
+        # the deviations are taken from a value near the mean, so they keep their precision
+        rng = np.random.default_rng(4)
+        values = 1e-3 + 1e-12 * rng.random((1, 10_000))
+        weights = rng.random(10_000)
+
+        mean, std = func(values, weights)
+
+        mean_expected, std_expected = fsum_mean_std(values, weights)
+        np.testing.assert_allclose(mean, mean_expected, rtol=1e-14)
+        np.testing.assert_allclose(std, std_expected, rtol=1e-13)
+
+    # lengths either side of a whole number of blocks, and leading blocks with no weight, which cannot give the
+    # value the deviations are taken from
+    @pytest.mark.parametrize("nbranches", [1, 3, SUM_BLOCK_SIZE - 1, SUM_BLOCK_SIZE + 1, 4 * SUM_BLOCK_SIZE + 3])
+    @pytest.mark.parametrize("zero_weight_blocks", [0, 2])
+    def test_block_boundaries(self, func, nbranches, zero_weight_blocks):
+        rng = np.random.default_rng(nbranches)
+        values = np.exp(rng.normal(0.0, 1.0, (2, nbranches)))
+        weights = rng.random(nbranches)
+        weights[: zero_weight_blocks * SUM_BLOCK_SIZE] = 0.0
+        if not weights.any():
+            weights[-1] = 1.0
+
+        mean, std = func(values, weights)
+
+        mean_expected, std_expected = fsum_mean_std(values, weights)
+        np.testing.assert_allclose(mean, mean_expected, rtol=1e-14)
+        np.testing.assert_allclose(std, std_expected, rtol=1e-13, atol=1e-300)
+
     def test_zero_mean(self, func, weights_and_values):
         weights, values = weights_and_values
         mean, std = func(values * 0.0, weights)
@@ -138,18 +178,19 @@ class TestBlockedSums:
         _, values = weights_and_values
         assert func(values) == pytest.approx(math.fsum(values), rel=1e-14)
 
-    @pytest.mark.parametrize("func", [_blocked_weighted_sum, _blocked_weighted_sum.py_func], ids=["jit", "python"])
-    def test_blocked_weighted_sum(self, func, weights_and_values):
+    @pytest.mark.parametrize("func", [_block_weighted_sum, _block_weighted_sum.py_func], ids=["jit", "python"])
+    def test_block_weighted_sum(self, func, weights_and_values):
         weights, values = weights_and_values
-        assert func(weights, values) == pytest.approx(math.fsum(weights * values), rel=1e-14)
+        expected = math.fsum(weights * (values - 0.3))
+        assert func(values, weights, 0, len(values), 0.3) == pytest.approx(expected, rel=1e-12, abs=1e-300)
 
     @pytest.mark.parametrize(
-        "func", [_blocked_weighted_sum_sq_dev, _blocked_weighted_sum_sq_dev.py_func], ids=["jit", "python"]
+        "func", [_block_weighted_sum_sq_dev, _block_weighted_sum_sq_dev.py_func], ids=["jit", "python"]
     )
-    def test_blocked_weighted_sum_sq_dev(self, func, weights_and_values):
+    def test_block_weighted_sum_sq_dev(self, func, weights_and_values):
         weights, values = weights_and_values
-        expected = math.fsum(weights * (values - 0.3) ** 2)
-        assert func(weights, values, 0.3) == pytest.approx(expected, rel=1e-14)
+        expected = math.fsum(weights * ((values - 0.3) - 0.1) ** 2)
+        assert func(values, weights, 0, len(values), 0.3, 0.1) == pytest.approx(expected, rel=1e-14, abs=1e-300)
 
 
 def reference_weighted_quantiles(values, weights, quantiles):

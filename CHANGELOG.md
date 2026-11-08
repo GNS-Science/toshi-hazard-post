@@ -53,6 +53,13 @@
   real realizations a task takes 0.66 s instead of 0.76 s with 18 workers, and 1.07 s instead of 1.16 s with 30. The
   rates are bit-identical. A worker now holds the buffer between tasks, which raised peak memory by about 0.9 GB
   with 30 workers. ([#107](https://github.com/GNS-Science/toshi-hazard-post/issues/107))
+- The weighted mean and std read each level once instead of twice. Each block of 256 branches gives its weighted
+  sum and the squared deviations from its own mean while it is in cache, and the blocks are then combined; the
+  deviations are taken from a value near the mean, and each block is summed with 4 partial sums. The mean and std
+  step is about 1.8x faster with 18 to 36 workers. On real realizations a task takes 0.60 s instead of 0.66 s with
+  18 workers, and 0.98 s instead of 1.07 s with 30. Mean and std change by rounding only (up to ~1e-15 relative,
+  closer to a long double reference than before), and a std much smaller than its mean is now accurate to ~2e-16
+  instead of ~9e-12. ([#107](https://github.com/GNS-Science/toshi-hazard-post/issues/107))
 - `aggregation_calc.build_branch_rates` takes an optional `out` array to write the rates into, and the new
   `calculators.composite_rates_into` writes them into a given array.
 - `calculators.weighted_quantiles` and `aggregation_calc.calculate_aggs` take optional `bounds` on the values of each
