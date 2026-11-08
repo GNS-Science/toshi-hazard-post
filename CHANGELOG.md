@@ -37,6 +37,18 @@
   (1267 MB to 105 MB RSS) while batches are loaded. Peak parent memory is unchanged, at about 1.36 GB for
   NSHM_v1.0.4: it is reached while the weights and branch index table are built, before the logic tree is released.
   ([#110](https://github.com/GNS-Science/toshi-hazard-post/issues/110))
+- The weighted quantiles read each level of the composite rates twice instead of three times. The bins are set
+  from bounds on each level's composite rates, worked out from the component rates, instead of a pass to find the
+  smallest and largest rate, and the gathering pass works out each rate's bin again instead of storing it. The
+  quantile kernel also uses 16384 bins instead of 65536, so that its bin tables take less cache. For NSHM_v1.0.4 the
+  quantile step is about 1.5x faster with 18 to 30 workers (0.36 s to 0.24 s per (location, imt) task at 18). On
+  real realizations, with 30 workers on an 18 core machine, a task takes 1.16 s instead of 1.41 s. Quantiles change
+  by floating point rounding only (up to 4e-13 relative), because the cumulative weights are summed by bin; the
+  saved float32 curves are unchanged.
+  ([#107](https://github.com/GNS-Science/toshi-hazard-post/issues/107))
+- `calculators.weighted_quantiles` and `aggregation_calc.calculate_aggs` take optional `bounds` on the values of each
+  level, from the new `calculators.composite_rate_bounds`. `aggregation_calc.AggSharedArgs` has the new required
+  field `branch_index_columns`, from the new `logic_tree.branch_index_columns`.
 - `aggregation_calc.AggTaskArgs` has the job's probabilities in `probs` instead of `table_filepath`.
 - New `data.group_batch_rows` finds the rows of each job in a batch table, for `data.get_job_probs`.
 - `calculators.weighted_quantiles` takes values with shape (IMTL, branch) and returns the quantiles of every level

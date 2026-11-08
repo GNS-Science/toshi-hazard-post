@@ -1,6 +1,7 @@
 """A collection of calculation functions for hazard aggregation."""
 
 import logging
+from collections.abc import Sequence
 from typing import TYPE_CHECKING, Union
 
 import numpy as np
@@ -158,9 +159,18 @@ def cov(mean: 'npt.NDArray', std: 'npt.NDArray') -> 'npt.NDArray':
 # number of bins that the values of a level are put in to find the values either side of each quantile. The
 # quantiles do not depend on it, only the time taken: with more bins fewer values are sorted, but the weight
 # of each bin is accumulated in a larger table
-QUANTILE_NBINS = 65536
+QUANTILE_NBINS = 16384
 # a set of values no larger than this is sorted rather than put in bins
 QUANTILE_SORT_SIZE = 4096
+
+
+@jit(nopython=True, inline='always')
+def _quantile_bin(value: float, vmin: float, scale: float, last_bin: int) -> int:
+    """The bin of a value: 0 for vmin (or less), then linear in value, with infinite values in the last bin."""
+    if value <= vmin:
+        return 0
+    position = (value - vmin) * scale
+    return 1 + int(position) if position < last_bin - 1 else last_bin
 
 
 # this kernel takes several seconds to compile, so the compiled code is kept on disk (see warm_up())
@@ -180,6 +190,10 @@ def _select_quantiles(
     nbins: int,
     sort_size: int,
     out: 'npt.NDArray',
+    has_range: bool,
+    range_lo: float,
+    range_hi: float,
+    range_hi_finite: float,
 ) -> None:
     """Find weighted quantiles of a set of values without sorting all of them.
 
@@ -190,6 +204,10 @@ def _select_quantiles(
     of the bin.
 
     The values must not be NaN.
+
+    The bins span the smallest to the largest finite value. Each value is read twice: once to put it in a bin,
+    and once to gather the values of the bins holding a quantile, working its bin out again rather than storing
+    it. If has_range is False the values are first read once more to find the range.
 
     Args:
         values: the values in branch order (value, )
@@ -206,20 +224,29 @@ def _select_quantiles(
         nbins: the number of bins for a large set of values, at least 4
         sort_size: a set of values no larger than this is sorted
         out: the quantile values, set for the members only (quantile, )
+        has_range: True if range_lo, range_hi and range_hi_finite are given, False to find them from the values
+        range_lo: at most the smallest value. If equal to range_hi, every value is equal to it
+        range_hi: at least the largest value
+        range_hi_finite: at least the largest finite value
     """
     n = values.shape[0]
-    vmin = values[0]
-    vmax = values[0]
-    # the largest finite value sets the width of the bins, so that an infinite rate does not empty them
-    vmax_finite = -np.inf
-    for i in range(n):
-        v = values[i]
-        if v < vmin:
-            vmin = v
-        if v > vmax:
-            vmax = v
-        if v > vmax_finite and v != np.inf:
-            vmax_finite = v
+    if has_range:
+        vmin = range_lo
+        vmax = range_hi
+        vmax_finite = range_hi_finite
+    else:
+        vmin = values[0]
+        vmax = values[0]
+        # the largest finite value sets the width of the bins, so that an infinite rate does not empty them
+        vmax_finite = -np.inf
+        for i in range(n):
+            v = values[i]
+            if v < vmin:
+                vmin = v
+            if v > vmax:
+                vmax = v
+            if v > vmax_finite and v != np.inf:
+                vmax_finite = v
 
     if vmin == vmax and not has_left and not has_right:
         for k in members:
@@ -251,21 +278,15 @@ def _select_quantiles(
             out[k] = np.interp(targets[k], xp, fp)
         return
 
-    # bin 0 holds the values equal to the minimum (e.g. all the zero rates), which never need sorting. The
-    # other bins are linear in value. Any binning that is monotonic in value gives the same quantiles
+    # bin 0 holds the values equal to the minimum (e.g. all the zero rates), which never need sorting, and is
+    # empty if vmin is below every value. The other bins are linear in value. Any binning that is monotonic in
+    # value gives the same quantiles, up to the rounding of the cumulative weights, which are summed by bin
     last_bin = nbins - 1
     scale = (nbins - 2) / (vmax_finite - vmin) if vmax_finite > vmin else 1.0
-    bin_index = np.empty(n, dtype=np.int32)
     bin_weight = np.zeros(nbins)
     bin_count = np.zeros(nbins, dtype=np.int64)
     for i in range(n):
-        v = values[i]
-        if v == vmin:
-            b = 0
-        else:
-            position = (v - vmin) * scale
-            b = 1 + int(position) if position < last_bin - 1 else last_bin
-        bin_index[i] = b
+        b = _quantile_bin(values[i], vmin, scale, last_bin)
         bin_weight[b] += weights[i]
         bin_count[b] += 1
 
@@ -280,8 +301,12 @@ def _select_quantiles(
     member_bin = np.empty(nmembers, dtype=np.int64)
     for m in range(nmembers):
         b = max(np.searchsorted(bin_weight_below, targets[members[m]], side='right') - 1, 0)
-        while bin_count[b] == 0:  # bin 0 is never empty
+        # only the empty bins after the last value can be landed on
+        while b > 0 and bin_count[b] == 0:
             b -= 1
+        # bin 0 is empty when vmin is only a bound, then the first non empty bin holds the target
+        while bin_count[b] == 0:
+            b += 1
         member_bin[m] = b
 
     # the non empty bins either side of each of those bins, -1 if there is none. The values of a level that
@@ -324,10 +349,10 @@ def _select_quantiles(
     last_v = np.empty(nselected)
     last_w = np.empty(nselected)
     for i in range(n):
-        s = slot[bin_index[i]]
+        v = values[i]
+        s = slot[_quantile_bin(v, vmin, scale, last_bin)]
         if s < 0:
             continue
-        v = values[i]
         if not seen[s] or v < first_v[s]:
             first_v[s] = v
             first_w[s] = weights[i]
@@ -372,6 +397,13 @@ def _select_quantiles(
             # a bin always holds fewer values than were binned, unless they are NaN: sort to be sure of stopping
             sort_size if count < n else count,
             out,
+            # the smallest and largest value of the bin are its range, unless the largest is infinite. This is a
+            # value rather than a literal False, which numba would compile as a second signature of this
+            # recursive kernel, and two cached signatures of a recursive function crash when loaded
+            last_v[s] != np.inf,
+            first_v[s],
+            last_v[s],
+            last_v[s],
         )
 
 
@@ -381,6 +413,7 @@ def weighted_quantiles(
     quantiles: Union[list[float], 'npt.NDArray'],
     nbins: int = QUANTILE_NBINS,
     sort_size: int = QUANTILE_SORT_SIZE,
+    bounds: tuple['npt.NDArray', 'npt.NDArray', 'npt.NDArray'] | None = None,
 ) -> 'npt.NDArray':
     """Calculate weighted quantiles of each level of an array.
 
@@ -389,8 +422,11 @@ def weighted_quantiles(
     weight. A quantile is linearly interpolated between the values either side of it, and is the smallest or
     largest value if it is outside of them.
 
-    Only the values near each quantile are sorted, see _select_quantiles(). nbins and sort_size change the
-    time taken, not the quantiles.
+    Only the values near each quantile are sorted, see _select_quantiles(). nbins, sort_size and bounds change
+    the time taken, and the quantiles only by rounding (the cumulative weights are summed in another order).
+
+    Given bounds, each level is read twice rather than three times. Use composite_rate_bounds() for the bounds
+    of composite rates. Bounds that do not hold every value give wrong quantiles.
 
     Args:
         values: array of values (IMTL, branch). They must not be NaN.
@@ -398,6 +434,9 @@ def weighted_quantiles(
         quantiles: quantiles to be found (quantile, ). Values should be in [0,1]
         nbins: the number of bins that a large set of values are put in, at least 4
         sort_size: a set of values no larger than this is sorted rather than put in bins
+        bounds: (lo, hi, hi_finite) each with shape (IMTL, ): at most the smallest value, at least the largest
+            value and at least the largest finite value of each level. If lo equals hi, every value of the level
+            is equal to it. If None, they are found from the values.
 
     Returns:
         weighted quantiles (quantile, IMTL)
@@ -411,6 +450,15 @@ def weighted_quantiles(
     # two of the bins are for the smallest and largest values, the rest have to divide the values in between
     if nbins < 4:
         raise ValueError("nbins must be at least 4")
+    nlevels = values.shape[0]
+    if bounds is None:
+        has_range = False
+        lo = hi = hi_finite = np.zeros(nlevels)
+    else:
+        has_range = True
+        lo, hi, hi_finite = (np.asarray(bound, dtype=np.float64) for bound in bounds)
+        if not lo.shape == hi.shape == hi_finite.shape == (nlevels,):
+            raise ValueError("bounds must have one entry for each level of values")
 
     quantiles = np.asarray(quantiles, dtype=np.float64)
     targets = quantiles * _blocked_sum(weights)
@@ -420,13 +468,44 @@ def weighted_quantiles(
     members = np.arange(targets.shape[0])
     level_quantiles = np.empty(targets.shape[0])
     wq = np.empty((targets.shape[0], values.shape[0]))
-    for i in range(values.shape[0]):
+    for i in range(nlevels):
         _select_quantiles(
             values[i], weights, 0.0, targets, members, False, 0.0, 0.0, False, 0.0, 0.0, nbins, sort_size,
-            level_quantiles,
+            level_quantiles, has_range, lo[i], hi[i], hi_finite[i],
         )  # fmt: skip
         wq[:, i] = level_quantiles
     return wq
+
+
+def composite_rate_bounds(
+    columns: Sequence['npt.NDArray'], component_rates: 'npt.NDArray'
+) -> tuple['npt.NDArray', 'npt.NDArray', 'npt.NDArray']:
+    """Bound the rates of the composite branches of each level, without building them.
+
+    A composite rate is the sum of one component rate from each column of the branch index table, added in
+    column order (see composite_rates()). Rounded addition is monotonic, so adding the smallest (largest) rate
+    of each column in the same order bounds every composite rate below (above). The bounds are exact if every
+    combination of the component branches of the columns is a composite branch.
+
+    Args:
+        columns: the component branches in each column of the branch index table, see
+            logic_tree.branch_index_columns()
+        component_rates: rates of the component branches (component branch, IMTL)
+
+    Returns:
+        (lo, hi, hi_finite) each with shape (IMTL, ): at most the smallest, at least the largest and at least the
+            largest finite composite rate of each level, as weighted_quantiles() takes for its bounds.
+    """
+    nlevels = component_rates.shape[1]
+    lo = np.zeros(nlevels)
+    hi = np.zeros(nlevels)
+    hi_finite = np.zeros(nlevels)
+    for column in columns:
+        rates = component_rates[column]
+        lo = lo + rates.min(axis=0)
+        hi = hi + rates.max(axis=0)
+        hi_finite = hi_finite + np.where(np.isinf(rates), -np.inf, rates).max(axis=0)
+    return lo, hi, hi_finite
 
 
 def warm_up() -> None:

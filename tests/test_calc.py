@@ -106,6 +106,19 @@ def test_calculate_aggs(branch_rates):
     assert np.allclose(hazard_agg, expected)
 
 
+def test_calculate_aggs_with_bounds(branch_rates):
+    weights = np.array([0.1, 0.1, 0.2, 0.3, 0.1, 0.2])
+    agg_types = ['mean', 'std', 'cov', '0.6', '0.1']
+    # any bounds that hold the rates of each level, here wider than they need to be
+    bounds = (branch_rates.min(axis=1) - 1.0, branch_rates.max(axis=1) + 1.0, branch_rates.max(axis=1) + 1.0)
+
+    with_bounds = aggregation_calc.calculate_aggs(branch_rates, weights, agg_types, bounds)
+
+    np.testing.assert_allclose(
+        with_bounds, aggregation_calc.calculate_aggs(branch_rates, weights, agg_types), rtol=1e-12
+    )
+
+
 # test for bug that didn't handle agg_types list that didn't include 'mean', 'std', and 'cov'
 @pytest.mark.parametrize(
     "agg_types",

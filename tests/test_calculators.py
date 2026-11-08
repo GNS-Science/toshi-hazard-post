@@ -12,6 +12,7 @@ from toshi_hazard_post.calculators import (
     _blocked_sum,
     _blocked_weighted_sum,
     _blocked_weighted_sum_sq_dev,
+    composite_rate_bounds,
     composite_rates,
     cov,
     prob_to_rate,
@@ -161,6 +162,11 @@ def reference_weighted_quantiles(values, weights, quantiles):
     return np.array(wq).T
 
 
+def exact_bounds(values):
+    """The smallest, largest and largest finite value of each level."""
+    return values.min(axis=1), values.max(axis=1), np.where(np.isinf(values), -np.inf, values).max(axis=1)
+
+
 def quantile_cases():
     """Awkward (values with shape (level, branch), weights) pairs, by name."""
     rng = np.random.default_rng(0)
@@ -221,7 +227,7 @@ class TestQuantiles:
 
     # with the default sizes the values of the cases are sorted directly, the smaller sizes put them in bins and
     # then put the values of crowded bins in bins again
-    @pytest.mark.parametrize("nbins,sort_size", [(65536, 4096), (64, 16), (4, 1)])
+    @pytest.mark.parametrize("nbins,sort_size", [(calculators.QUANTILE_NBINS, 4096), (64, 16), (4, 1)])
     @pytest.mark.parametrize("case", quantile_cases().keys())
     def test_matches_sorting_every_value(self, case, nbins, sort_size):
         values, weights = quantile_cases()[case]
@@ -231,6 +237,36 @@ class TestQuantiles:
         expected = reference_weighted_quantiles(values, weights, self.QUANTILES)
         assert quantiles.shape == (len(self.QUANTILES), values.shape[0])
         np.testing.assert_allclose(quantiles, expected, rtol=1e-10)
+
+    @pytest.mark.parametrize("slack", [0.0, 0.5], ids=["exact", "loose"])
+    @pytest.mark.parametrize("case", quantile_cases().keys())
+    def test_bounds_match_sorting_every_value(self, case, slack):
+        # the bounds only have to hold every value of a level: they set the bins, not the quantiles
+        values, weights = quantile_cases()[case]
+        lo, hi, hi_finite = exact_bounds(values)
+        widen = slack * (1.0 + np.abs(lo))
+
+        quantiles = weighted_quantiles(
+            values, weights, self.QUANTILES, nbins=64, sort_size=16, bounds=(lo - widen, hi + widen, hi_finite + widen)
+        )
+
+        expected = reference_weighted_quantiles(values, weights, self.QUANTILES)
+        np.testing.assert_allclose(quantiles, expected, rtol=1e-10)
+
+    @pytest.mark.parametrize("case", ["hazard curve like", "mostly zero", "an infinite value", "all equal"])
+    def test_exact_bounds_are_what_the_kernel_finds(self, case):
+        values, weights = quantile_cases()[case]
+
+        with_bounds = weighted_quantiles(
+            values, weights, self.QUANTILES, nbins=64, sort_size=16, bounds=exact_bounds(values)
+        )
+        without = weighted_quantiles(values, weights, self.QUANTILES, nbins=64, sort_size=16)
+
+        assert np.array_equal(with_bounds, without)
+
+    def test_bounds_must_have_one_entry_for_each_level(self):
+        with pytest.raises(ValueError, match="one entry for each level"):
+            weighted_quantiles(np.ones((3, 10)), np.ones(10), [0.5], bounds=(np.ones(2), np.ones(2), np.ones(2)))
 
     def test_equal_values_are_in_branch_order(self):
         # the weight of the last of the equal values sets where interpolation to the next value starts, so
@@ -330,3 +366,42 @@ def test_composite_rates_single_component(func):
     rates = func(branch_index_table, component_rates)
 
     assert rates.tolist() == [[10.0, 1.0, 10.0], [20.0, 2.0, 20.0], [30.0, 3.0, 30.0]]
+
+
+def composite_rate_case():
+    """An index table with 3 columns drawing on separate component branches, and their component rates."""
+    rng = np.random.default_rng(5)
+    # 12 component branches x 5 levels, with zeros at the higher levels and one infinite rate
+    component_rates = np.exp(rng.normal(0.0, 1.0, (12, 5))) * np.logspace(-1, -5, 5)[None, :]
+    component_rates[rng.random((12, 5)) < 0.3] = 0.0
+    component_rates[:, 4] = 0.0
+    component_rates[5, 2] = np.inf
+    return component_rates, [np.array([0, 1, 2, 3]), np.array([4, 5, 6, 7]), np.array([8, 9, 10, 11])]
+
+
+def test_composite_rate_bounds_hold_every_composite_rate():
+    component_rates, columns = composite_rate_case()
+    rng = np.random.default_rng(6)
+    # some of the combinations of one component branch from each column
+    branch_index_table = np.stack([rng.choice(column, 20) for column in columns], axis=1)
+    rates = composite_rates(branch_index_table, component_rates)
+
+    lo, hi, hi_finite = composite_rate_bounds(columns, component_rates)
+
+    assert np.all(lo <= rates.min(axis=1))
+    assert np.all(hi >= rates.max(axis=1))
+    assert np.all(hi_finite >= np.where(np.isinf(rates), -np.inf, rates).max(axis=1))
+
+
+def test_composite_rate_bounds_are_exact_for_every_combination():
+    component_rates, columns = composite_rate_case()
+    branch_index_table = np.array(np.meshgrid(*columns, indexing='ij')).reshape(len(columns), -1).T
+    rates = composite_rates(branch_index_table, component_rates)
+
+    lo, hi, hi_finite = composite_rate_bounds(columns, component_rates)
+
+    assert lo.tolist() == rates.min(axis=1).tolist()
+    assert hi.tolist() == rates.max(axis=1).tolist()
+    assert hi_finite.tolist() == np.where(np.isinf(rates), -np.inf, rates).max(axis=1).tolist()
+    # the level with an infinite rate
+    assert hi[2] == np.inf and np.isfinite(hi_finite[2])

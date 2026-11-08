@@ -60,6 +60,8 @@ class AggSharedArgs:
         branch_index_table_dtype: the data type of the branch index table array.
         weights_shm_name: the name of the shared memory segment holding the weights.
         branch_index_table_shm_name: the name of the shared memory segment holding the branch index table.
+        branch_index_columns: the component branches in each column of the branch index table, used to bound the
+            composite rates of each level for the quantiles (see logic_tree.branch_index_columns()).
         skip_save: set to True if skipping saving the aggregations. Used when debugging to avoid writing to a database.
     """
 
@@ -71,16 +73,24 @@ class AggSharedArgs:
     branch_index_table_dtype: str
     weights_shm_name: str
     branch_index_table_shm_name: str
+    branch_index_columns: list['npt.NDArray']
     skip_save: bool
 
 
-def calculate_aggs(branch_rates: 'npt.NDArray', weights: 'npt.NDArray', agg_types: Sequence[str]) -> 'npt.NDArray':
+def calculate_aggs(
+    branch_rates: 'npt.NDArray',
+    weights: 'npt.NDArray',
+    agg_types: Sequence[str],
+    bounds: tuple['npt.NDArray', 'npt.NDArray', 'npt.NDArray'] | None = None,
+) -> 'npt.NDArray':
     """Calculate weighted aggregate statistics of the composite realizations.
 
     Args:
         branch_rates: hazard rates for every composite realization of the model with dimensions (IMTL, branch)
         weights: one dimensional array of weights for composite branches with dimensions (branch,)
         agg_types: the aggregate statistics to be calculated (e.g., "mean", "0.5") with dimension (agg_type,)
+        bounds: bounds on the rates of each level, which make the quantiles faster to find (see
+            calculators.weighted_quantiles() and calculators.composite_rate_bounds())
 
     Returns:
         hazard: aggregate rates array with dimension (agg_type, IMTL)
@@ -117,7 +127,7 @@ def calculate_aggs(branch_rates: 'npt.NDArray', weights: 'npt.NDArray', agg_type
         mean, std = calculators.weighted_avg_and_std(branch_rates, weights)
         cov = calculators.cov(mean, std)
     if quantile_points:
-        aggs[idx_quantile, :] = calculators.weighted_quantiles(branch_rates, weights, quantile_points)
+        aggs[idx_quantile, :] = calculators.weighted_quantiles(branch_rates, weights, quantile_points, bounds=bounds)
 
     if idx_mean is not None:
         aggs[idx_mean, :] = mean
@@ -196,7 +206,8 @@ def calc_aggregation(task_args: AggTaskArgs, shared_args: AggSharedArgs) -> None
     log.debug("worker %s: time to build_branch_rates %0.2f seconds", worker_name, time3 - time2)
 
     log.info("worker %s:  calculating aggregates . . . ", worker_name)
-    hazard = calculate_aggs(composite_rates, weights, agg_types)
+    bounds = calculators.composite_rate_bounds(shared_args.branch_index_columns, component_rates_array)
+    hazard = calculate_aggs(composite_rates, weights, agg_types, bounds)
     time4 = time.perf_counter()
     log.debug("worker %s: time to calculate aggs %0.2f seconds", worker_name, time4 - time3)
 
