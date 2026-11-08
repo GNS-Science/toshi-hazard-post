@@ -14,6 +14,7 @@ from toshi_hazard_post.calculators import (
     _blocked_weighted_sum_sq_dev,
     composite_rate_bounds,
     composite_rates,
+    composite_rates_into,
     cov,
     prob_to_rate,
     rate_to_prob,
@@ -405,3 +406,24 @@ def test_composite_rate_bounds_are_exact_for_every_combination():
     assert hi_finite.tolist() == np.where(np.isinf(rates), -np.inf, rates).max(axis=1).tolist()
     # the level with an infinite rate
     assert hi[2] == np.inf and np.isfinite(hi_finite[2])
+
+
+@pytest.mark.parametrize("func", [composite_rates_into, composite_rates_into.py_func], ids=["jit", "python"])
+@pytest.mark.parametrize("block", [1, 3, 4096])
+def test_composite_rates_into(func, block):
+    # 10 composite branches, not a whole number of blocks of 3
+    rng = np.random.default_rng(7)
+    component_rates = rng.random((7, 5))
+    branch_index_table = rng.integers(0, 7, (10, 3)).astype(np.uint16)
+    expected = np.empty((5, 10))
+    for i, row in enumerate(branch_index_table):
+        for j in range(5):
+            # the same order of additions as composite_rates, so that the rates are bit-identical
+            expected[j, i] = ((0.0 + component_rates[row[0], j]) + component_rates[row[1], j]) + component_rates[
+                row[2], j
+            ]
+    rates = np.full((5, 10), np.nan)
+
+    func(branch_index_table, component_rates, rates, block)
+
+    assert rates.tolist() == expected.tolist()

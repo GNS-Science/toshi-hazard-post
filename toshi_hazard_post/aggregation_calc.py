@@ -2,6 +2,7 @@
 
 import logging
 import os
+import threading
 import time
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -140,7 +141,9 @@ def calculate_aggs(
     return aggs
 
 
-def build_branch_rates(branch_index_table: 'npt.NDArray', component_rates: 'npt.NDArray') -> 'npt.NDArray':
+def build_branch_rates(
+    branch_index_table: 'npt.NDArray', component_rates: 'npt.NDArray', out: 'npt.NDArray | None' = None
+) -> 'npt.NDArray':
     """Calculate the rate for the composite branches in the logic tree.
 
     The rate for a composite branch is the sum of rates of the component branches.
@@ -148,19 +151,48 @@ def build_branch_rates(branch_index_table: 'npt.NDArray', component_rates: 'npt.
     Args:
         branch_index_table: composite branches represented as rows of indices into component_rates
         component_rates: component realization rates with shape (n component branches, n IMTL)
+        out: a float64, C ordered array with shape (n IMTL, n branches) to write the rates into, or None for a new
+            array. Writing into an array used for every task is about twice as fast as new memory.
 
     Returns:
-        The rates array with shape (n IMTL, n branches)
+        The rates array with shape (n IMTL, n branches), out if given.
 
     Raises:
         IndexError: if the branch index table refers to a component branch not in component_rates.
+        ValueError: if out does not have the shape, dtype or order of the rates.
     """
     if branch_index_table.max() >= len(component_rates):
         raise IndexError(
             f"branch index table refers to component branch {branch_index_table.max()} "
             f"but there are only {len(component_rates)} component branches"
         )
-    return calculators.composite_rates(branch_index_table, component_rates)
+    if out is None:
+        return calculators.composite_rates(branch_index_table, component_rates)
+    shape = (component_rates.shape[1], branch_index_table.shape[0])
+    if out.shape != shape or out.dtype != np.float64 or not out.flags.c_contiguous:
+        raise ValueError(
+            f"out must be a C ordered float64 array with shape {shape}, not {out.dtype} with shape {out.shape}"
+        )
+    calculators.composite_rates_into(branch_index_table, component_rates, out, calculators.COMPOSITE_RATES_BLOCK)
+    return out
+
+
+# each thread's buffer for the composite rates, kept between tasks. A worker process runs its tasks one at a time
+# in one thread, but test_end_to_end runs them on a ThreadPoolExecutor, two or more at once in one process
+_thread_local = threading.local()
+
+
+def _composite_rates_buffer(shape: tuple[int, int]) -> 'npt.NDArray':
+    """This thread's buffer for composite rates with the given shape, the same array for every task.
+
+    The buffer stays allocated between tasks: about 345 MB per worker for NSHM_v1.0.4, which each task allocated
+    anyway.
+    """
+    buffer = getattr(_thread_local, "composite_rates", None)
+    if buffer is None or buffer.shape != shape:
+        buffer = None  # release the old buffer before allocating the new one
+        _thread_local.composite_rates = buffer = np.empty(shape)
+    return buffer
 
 
 def calc_aggregation(task_args: AggTaskArgs, shared_args: AggSharedArgs) -> None:
@@ -201,7 +233,10 @@ def calc_aggregation(task_args: AggTaskArgs, shared_args: AggSharedArgs) -> None
 
     log.debug('worker %s: rates_table %s', worker_name, component_rates_array.shape)
 
-    composite_rates = build_branch_rates(branch_index_table, component_rates_array)
+    rates_shape = (component_rates_array.shape[1], branch_index_table.shape[0])
+    composite_rates = build_branch_rates(
+        branch_index_table, component_rates_array, out=_composite_rates_buffer(rates_shape)
+    )
     time3 = time.perf_counter()
     log.debug("worker %s: time to build_branch_rates %0.2f seconds", worker_name, time3 - time2)
 

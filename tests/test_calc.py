@@ -54,6 +54,45 @@ def test_build_branch_rates():
     assert rates.tolist() == [[11.0, 200.0], [22.0, 400.0], [33.0, 600.0]]
 
 
+def test_build_branch_rates_into_buffer():
+    component_rates = np.array([[1.0, 2.0, 3.0], [10.0, 20.0, 30.0], [100.0, 200.0, 300.0]])
+    index_table = np.array([[0, 1], [2, 2]], dtype=np.uint16)
+    out = np.full((3, 2), np.nan)
+
+    rates = aggregation_calc.build_branch_rates(index_table, component_rates, out=out)
+
+    assert rates is out
+    assert rates.tolist() == [[11.0, 200.0], [22.0, 400.0], [33.0, 600.0]]
+
+
+@pytest.mark.parametrize(
+    "out", [np.empty((2, 2)), np.empty((3, 2), dtype=np.float32), np.empty((2, 3)).T], ids=["shape", "dtype", "order"]
+)
+def test_build_branch_rates_rejects_unusable_buffer(out):
+    component_rates = np.array([[1.0, 2.0, 3.0], [10.0, 20.0, 30.0], [100.0, 200.0, 300.0]])
+    index_table = np.array([[0, 1], [2, 2]], dtype=np.uint16)
+    with pytest.raises(ValueError, match="out"):
+        aggregation_calc.build_branch_rates(index_table, component_rates, out=out)
+
+
+def test_composite_rates_buffer_is_reused_within_a_thread():
+    buffer = aggregation_calc._composite_rates_buffer((3, 4))
+
+    assert aggregation_calc._composite_rates_buffer((3, 4)) is buffer
+    assert aggregation_calc._composite_rates_buffer((3, 5)).shape == (3, 5)
+
+
+def test_composite_rates_buffer_is_not_shared_between_threads():
+    # test_end_to_end runs the tasks on a ThreadPoolExecutor, so two tasks can run at once in one process
+    from concurrent.futures import ThreadPoolExecutor
+
+    buffer = aggregation_calc._composite_rates_buffer((3, 4))
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        other = executor.submit(aggregation_calc._composite_rates_buffer, (3, 4)).result()
+
+    assert other is not buffer
+
+
 def test_build_branch_rates_index_out_of_range():
     component_rates = np.array([[1.0, 2.0], [10.0, 20.0]])
     index_table = np.array([[0, 2]], dtype=np.uint16)
