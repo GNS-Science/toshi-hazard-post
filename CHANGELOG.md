@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [0.8.0] - 2026-11-12
 ### Dependencies
 - deps: major: pyarrow 24→26, twine 6→7, plus transitives (backrefs, cryptography, filelock, multidict, pillow, readme-renderer, smart-open, watchdog, wcmatch); minor/patch: all in-range upgrades (84 lock entries), numba range widened to <0.69. pymdown-extensions 12 skipped (breaks mkdocs build).
 ### Changed
