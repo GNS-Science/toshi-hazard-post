@@ -1,6 +1,8 @@
 # Changelog
 
 ## [Unreleased]
+### Dependencies
+- deps: major: pyarrow 24→26, twine 6→7, plus transitives (backrefs, cryptography, filelock, multidict, pillow, readme-renderer, smart-open, watchdog, wcmatch); minor/patch: all in-range upgrades (84 lock entries), numba range widened to <0.69. pymdown-extensions 12 skipped (breaks mkdocs build).
 ### Changed
 - Composite branch rates are built from a table of integer indices into the component branches, summed in a numba
   kernel, instead of a Python loop with digest string lookups. For NSHM_v1.0.4 this is about 24x faster per
