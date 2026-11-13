@@ -468,3 +468,125 @@ def test_composite_rates_into(func, block):
     func(branch_index_table, component_rates, rates, block)
 
     assert rates.tolist() == expected.tolist()
+
+
+def component_aggs_case(ncomponents, nbranches):
+    """An index table with ncomponents columns, each drawing on its own component branches, with component rates
+    that have zeros, a level of all zeros and an infinite rate, and weights of which some are zero."""
+    rng = np.random.default_rng(ncomponents)
+    per_column = 6
+    component_rates = np.exp(rng.normal(0.0, 1.0, (ncomponents * per_column, 6))) * np.logspace(-1, -6, 6)[None, :]
+    component_rates[rng.random(component_rates.shape) < 0.3] = 0.0
+    component_rates[:, 5] = 0.0
+    component_rates[2, 3] = np.inf
+    columns = [np.arange(k * per_column, (k + 1) * per_column) for k in range(ncomponents)]
+    branch_index_table = np.stack([rng.choice(column, nbranches) for column in columns], axis=1).astype(np.uint16)
+    weights = rng.random(nbranches) * (rng.random(nbranches) > 0.2)
+    return branch_index_table, component_rates, weights, columns
+
+
+def aggs_of_composite_rates(branch_index_table, component_rates, weights, quantiles, columns, nbins, sort_size):
+    """Mean, std and quantiles of the composite rates, from the composite rates array."""
+    rates = composite_rates(branch_index_table, component_rates)
+    mean, std = weighted_avg_and_std(rates, weights)
+    bounds = composite_rate_bounds(columns, component_rates)
+    wq = weighted_quantiles(rates, weights, quantiles, nbins=nbins, sort_size=sort_size, bounds=bounds)
+    return mean, std, wq
+
+
+COMPONENT_AGGS_QUANTILES = [0.0, 0.005, 0.01, 0.1, 0.5, 0.9, 0.975, 1.0]
+
+
+@pytest.fixture(params=["jit", "python"])
+def component_aggs_kernel(request, monkeypatch):
+    if request.param == "python":
+        for name in ('_composite_rate_aggs', '_pass_a', '_pass_b'):
+            monkeypatch.setattr(calculators, name, getattr(calculators, name).py_func)
+
+
+@pytest.mark.usefixtures("component_aggs_kernel")
+class TestCompositeRateAggs:
+    # the NSHM tables have 4 columns, which has its own loop
+    @pytest.mark.parametrize("ncomponents", [4, 3, 1])
+    # small bins and sorts, so that the bins holding the quantiles are put in bins again
+    @pytest.mark.parametrize("nbins, sort_size", [(64, 16), (16384, 4096)])
+    def test_same_as_from_composite_rates(self, ncomponents, nbins, sort_size):
+        table, component_rates, weights, columns = component_aggs_case(ncomponents, 5000)
+
+        actual = calculators.composite_rate_aggs(
+            table, component_rates, weights, COMPONENT_AGGS_QUANTILES, columns, nbins=nbins, sort_size=sort_size
+        )
+
+        expected = aggs_of_composite_rates(
+            table, component_rates, weights, COMPONENT_AGGS_QUANTILES, columns, nbins, sort_size
+        )
+        # bit-identical, with NaN equal to NaN (the mean and std of the level with an infinite rate)
+        for a, e in zip(actual, expected, strict=True):
+            np.testing.assert_array_equal(a, e, strict=True)
+
+    def test_small_table_is_sorted(self):
+        table, component_rates, weights, columns = component_aggs_case(4, 50)
+
+        actual = calculators.composite_rate_aggs(table, component_rates, weights, COMPONENT_AGGS_QUANTILES, columns)
+
+        expected = aggs_of_composite_rates(
+            table, component_rates, weights, COMPONENT_AGGS_QUANTILES, columns, 16384, 4096
+        )
+        # bit-identical, with NaN equal to NaN (the mean and std of the level with an infinite rate)
+        for a, e in zip(actual, expected, strict=True):
+            np.testing.assert_array_equal(a, e, strict=True)
+
+    def test_no_quantiles(self):
+        table, component_rates, weights, columns = component_aggs_case(4, 5000)
+
+        mean, std, wq = calculators.composite_rate_aggs(table, component_rates, weights, [], columns)
+
+        expected_mean, expected_std = weighted_avg_and_std(composite_rates(table, component_rates), weights)
+        assert wq.shape == (0, 6)
+        np.testing.assert_array_equal(mean, expected_mean, strict=True)
+        np.testing.assert_array_equal(std, expected_std, strict=True)
+
+    def test_against_definition(self):
+        table, component_rates, weights, columns = component_aggs_case(4, 20_000)
+        rates = composite_rates(table, component_rates)
+
+        mean, std, wq = calculators.composite_rate_aggs(
+            table, component_rates, weights, COMPONENT_AGGS_QUANTILES, columns, nbins=64, sort_size=16
+        )
+
+        finite = [0, 1, 2, 4, 5]  # level 3 has an infinite rate, which has no meaningful mean
+        expected_mean, expected_std = fsum_mean_std(rates[finite], weights)
+        np.testing.assert_allclose(mean[finite], expected_mean, rtol=1e-12)
+        np.testing.assert_allclose(std[finite], expected_std, rtol=1e-10, atol=1e-300)
+        np.testing.assert_allclose(
+            wq, reference_weighted_quantiles(rates, weights, COMPONENT_AGGS_QUANTILES), rtol=1e-10
+        )
+
+
+@pytest.mark.parametrize(
+    "kwargs, match",
+    [
+        (dict(nbins=3), "nbins"),
+        (dict(nbins=65537), "nbins"),
+        (dict(weights=np.ones(7)), "weights"),
+        (dict(columns=[np.arange(2)]), "columns"),
+    ],
+)
+def test_composite_rate_aggs_rejects(kwargs, match):
+    table, component_rates, weights, columns = component_aggs_case(2, 10)
+    args = dict(
+        branch_index_table=table, component_rates=component_rates, weights=weights, quantiles=[0.5], columns=columns
+    )
+    args.update(kwargs)
+    with pytest.raises(ValueError, match=match):
+        calculators.composite_rate_aggs(**args)
+
+
+def test_warm_up_compiles_the_composite_rate_aggs_kernel_for_the_types_of_an_aggregation():
+    calculators.warm_up()
+    signatures = list(calculators._composite_rate_aggs.signatures)
+    # a uint16 index table and float64 rates, as calc_aggregation() passes
+    table, component_rates, weights, columns = component_aggs_case(4, 5000)
+    calculators.composite_rate_aggs(table, component_rates, weights, [0.005, 0.5, 0.995], columns)
+    assert len(signatures) == 1
+    assert calculators._composite_rate_aggs.signatures == signatures

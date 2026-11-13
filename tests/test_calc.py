@@ -75,24 +75,6 @@ def test_build_branch_rates_rejects_unusable_buffer(out):
         aggregation_calc.build_branch_rates(index_table, component_rates, out=out)
 
 
-def test_composite_rates_buffer_is_reused_within_a_thread():
-    buffer = aggregation_calc._composite_rates_buffer((3, 4))
-
-    assert aggregation_calc._composite_rates_buffer((3, 4)) is buffer
-    assert aggregation_calc._composite_rates_buffer((3, 5)).shape == (3, 5)
-
-
-def test_composite_rates_buffer_is_not_shared_between_threads():
-    # test_end_to_end runs the tasks on a ThreadPoolExecutor, so two tasks can run at once in one process
-    from concurrent.futures import ThreadPoolExecutor
-
-    buffer = aggregation_calc._composite_rates_buffer((3, 4))
-    with ThreadPoolExecutor(max_workers=1) as executor:
-        other = executor.submit(aggregation_calc._composite_rates_buffer, (3, 4)).result()
-
-    assert other is not buffer
-
-
 def test_build_branch_rates_index_out_of_range():
     component_rates = np.array([[1.0, 2.0], [10.0, 20.0]])
     index_table = np.array([[0, 2]], dtype=np.uint16)
@@ -156,6 +138,32 @@ def test_calculate_aggs_with_bounds(branch_rates):
     np.testing.assert_allclose(
         with_bounds, aggregation_calc.calculate_aggs(branch_rates, weights, agg_types), rtol=1e-12
     )
+
+
+@pytest.mark.parametrize("agg_types", [['mean', 'std', 'cov', '0.6', '0.1'], ['0.9', 'cov', '0.005'], ['std']])
+def test_calculate_aggs_from_components(agg_types):
+    rng = np.random.default_rng(1)
+    nbranches = 6000  # enough that the rates are not all sorted at once
+    component_rates = np.exp(rng.normal(0.0, 1.0, (8, NLEVELS))) * np.logspace(-1, -6, NLEVELS)[None, :]
+    columns = [np.arange(0, 4), np.arange(4, 8)]
+    index_table = np.stack([rng.choice(column, nbranches) for column in columns], axis=1).astype(np.uint16)
+    weights = rng.random(nbranches)
+
+    aggs = aggregation_calc.calculate_aggs_from_components(index_table, component_rates, weights, agg_types, columns)
+
+    rates = aggregation_calc.build_branch_rates(index_table, component_rates)
+    bounds = calculators.composite_rate_bounds(columns, component_rates)
+    expected = aggregation_calc.calculate_aggs(rates, weights, agg_types, bounds)
+    assert aggs.tolist() == expected.tolist()
+
+
+def test_calculate_aggs_from_components_index_out_of_range():
+    component_rates = np.array([[1.0, 2.0], [10.0, 20.0]])
+    index_table = np.array([[0, 2]], dtype=np.uint16)
+    with pytest.raises(IndexError):
+        aggregation_calc.calculate_aggs_from_components(
+            index_table, component_rates, np.ones(1), ['mean'], [np.array([0]), np.array([2])]
+        )
 
 
 # test for bug that didn't handle agg_types list that didn't include 'mean', 'std', and 'cov'

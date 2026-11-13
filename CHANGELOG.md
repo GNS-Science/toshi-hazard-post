@@ -51,8 +51,7 @@
   longer maps and zeroes ~345 MB for every NSHM_v1.0.4 task, which took about as long as the sum itself. The
   composite rates step is about 2x faster with one worker (0.22 s to 0.11 s) and 1.55x with 18 to 30 workers. On
   real realizations a task takes 0.66 s instead of 0.76 s with 18 workers, and 1.07 s instead of 1.16 s with 30. The
-  rates are bit-identical. A worker now holds the buffer between tasks, which raised peak memory by about 0.9 GB
-  with 30 workers. ([#107](https://github.com/GNS-Science/toshi-hazard-post/issues/107))
+  rates are bit-identical. ([#107](https://github.com/GNS-Science/toshi-hazard-post/issues/107))
 - The weighted mean and std read each level once instead of twice. Each block of 256 branches gives its weighted
   sum and the squared deviations from its own mean while it is in cache, and the blocks are then combined; the
   deviations are taken from a value near the mean, and each block is summed with 4 partial sums. The mean and std
@@ -60,8 +59,19 @@
   18 workers, and 0.98 s instead of 1.07 s with 30. Mean and std change by rounding only (up to ~1e-15 relative,
   closer to a long double reference than before), and a std much smaller than its mean is now accurate to ~2e-16
   instead of ~9e-12. ([#107](https://github.com/GNS-Science/toshi-hazard-post/issues/107))
+- The mean, std and quantiles are calculated straight from the component rates, without building the composite
+  rates array. Each level is done in two passes over the composite branches, each rate summed from the component
+  rates of the level as it is needed: the first gives the mean and std and puts each rate in its quantile bin,
+  keeping only the bin (2 bytes per branch), and the second sums again only the rates in the bins next to each
+  quantile. A worker no longer reads and writes ~345 MB per NSHM_v1.0.4 task, or holds the buffer for it between
+  tasks. For NSHM_v1.0.4 a task is about 1.45x faster with one worker and 1.5 to 1.6x faster with 18 to 30 workers.
+  On real realizations a task takes 0.40 s instead of 0.61 s with 18 workers and 0.66 s instead of 0.98 s with 30,
+  the run 47 s instead of 56 s and 36 s instead of 49 s, and peak machine memory falls from 21-26 GB to 14 GB.
+  The results are bit-identical. ([#107](https://github.com/GNS-Science/toshi-hazard-post/issues/107))
 - `aggregation_calc.build_branch_rates` takes an optional `out` array to write the rates into, and the new
   `calculators.composite_rates_into` writes them into a given array.
+- New `calculators.composite_rate_aggs` and `aggregation_calc.calculate_aggs_from_components` calculate the
+  aggregates from the component rates and the branch index table; `calc_aggregation` uses them.
 - `calculators.weighted_quantiles` and `aggregation_calc.calculate_aggs` take optional `bounds` on the values of each
   level, from the new `calculators.composite_rate_bounds`. `aggregation_calc.AggSharedArgs` has the new required
   field `branch_index_columns`, from the new `logic_tree.branch_index_columns`.

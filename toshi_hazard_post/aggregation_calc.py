@@ -2,7 +2,6 @@
 
 import logging
 import os
-import threading
 import time
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -78,6 +77,43 @@ class AggSharedArgs:
     skip_save: bool
 
 
+def _is_float(value: str) -> bool:
+    try:
+        float(value)
+        return True
+    except ValueError:
+        return False
+
+
+def _quantile_points(agg_types: Sequence[str]) -> list[float]:
+    """The quantiles among the aggregate statistics, in order."""
+    return [float(agg) for agg in agg_types if _is_float(agg)]
+
+
+def _needs_mean_std(agg_types: Sequence[str]) -> bool:
+    return any(agg in agg_types for agg in ("mean", "std", "cov"))
+
+
+def _assemble_aggs(
+    agg_types: Sequence[str],
+    nlevels: int,
+    mean: 'npt.NDArray | None',
+    std: 'npt.NDArray | None',
+    quantiles: 'npt.NDArray | None',
+) -> 'npt.NDArray':
+    """The aggregates in the order of agg_types (agg_type, IMTL), from the mean, std and quantiles (quantile, IMTL)
+    in the order of _quantile_points(). Each is None if no aggregate needs it."""
+    aggs = np.empty((len(agg_types), nlevels))
+    if quantiles is not None:
+        aggs[[_is_float(agg) for agg in agg_types], :] = quantiles
+    if mean is not None and std is not None:
+        for agg, value in (("mean", mean), ("std", std), ("cov", calculators.cov(mean, std))):
+            if agg in agg_types:
+                aggs[list(agg_types).index(agg), :] = value
+    log.debug("agg with shape %s", aggs.shape)
+    return aggs
+
+
 def calculate_aggs(
     branch_rates: 'npt.NDArray',
     weights: 'npt.NDArray',
@@ -100,45 +136,55 @@ def calculate_aggs(
     log.debug("weights with shape %s", weights.shape)
     log.debug("agg_types %s", agg_types)
 
-    def is_float(value):
-        try:
-            float(value)
-            return True
-        except ValueError:
-            return False
-
-    def index(lst, value):
-        try:
-            return lst.index(value)
-        except ValueError:
-            pass
-        return None
-
-    idx_mean = index(agg_types, "mean")
-    idx_std = index(agg_types, "std")
-    idx_cov = index(agg_types, "cov")
-    idx_quantile = [is_float(agg) for agg in agg_types]
-    quantile_points = [float(pt) for pt in agg_types if is_float(pt)]
-
-    nlevels = branch_rates.shape[0]
-    naggs = len(agg_types)
-    aggs = np.empty((naggs, nlevels))
-
-    if (idx_mean is not None) | (idx_std is not None) | (idx_cov is not None):
+    mean = std = quantiles = None
+    if _needs_mean_std(agg_types):
         mean, std = calculators.weighted_avg_and_std(branch_rates, weights)
-        cov = calculators.cov(mean, std)
+    quantile_points = _quantile_points(agg_types)
     if quantile_points:
-        aggs[idx_quantile, :] = calculators.weighted_quantiles(branch_rates, weights, quantile_points, bounds=bounds)
+        quantiles = calculators.weighted_quantiles(branch_rates, weights, quantile_points, bounds=bounds)
+    return _assemble_aggs(agg_types, branch_rates.shape[0], mean, std, quantiles)
 
-    if idx_mean is not None:
-        aggs[idx_mean, :] = mean
-    if idx_std is not None:
-        aggs[idx_std, :] = std
-    if idx_cov is not None:
-        aggs[idx_cov, :] = cov
 
-    log.debug("agg with shape %s", aggs.shape)
-    return aggs
+def _check_branch_index_table(branch_index_table: 'npt.NDArray', component_rates: 'npt.NDArray') -> None:
+    if branch_index_table.max() >= len(component_rates):
+        raise IndexError(
+            f"branch index table refers to component branch {branch_index_table.max()} "
+            f"but there are only {len(component_rates)} component branches"
+        )
+
+
+def calculate_aggs_from_components(
+    branch_index_table: 'npt.NDArray',
+    component_rates: 'npt.NDArray',
+    weights: 'npt.NDArray',
+    agg_types: Sequence[str],
+    columns: Sequence['npt.NDArray'],
+) -> 'npt.NDArray':
+    """Calculate weighted aggregate statistics of the composite realizations from the component realizations.
+
+    The same, to the bit, as calculate_aggs() of the rates from build_branch_rates() with the bounds of
+    calculators.composite_rate_bounds(), without building the rates (see calculators.composite_rate_aggs()).
+
+    Args:
+        branch_index_table: composite branches represented as rows of indices into component_rates
+        component_rates: component realization rates with shape (n component branches, n IMTL)
+        weights: one dimensional array of weights for composite branches with dimensions (branch,)
+        agg_types: the aggregate statistics to be calculated (e.g., "mean", "0.5") with dimension (agg_type,)
+        columns: the component branches in each column of the branch index table (see
+            logic_tree.branch_index_columns())
+
+    Returns:
+        hazard: aggregate rates array with dimension (agg_type, IMTL)
+
+    Raises:
+        IndexError: if the branch index table refers to a component branch not in component_rates.
+    """
+    _check_branch_index_table(branch_index_table, component_rates)
+    quantile_points = _quantile_points(agg_types)
+    mean, std, quantiles = calculators.composite_rate_aggs(
+        branch_index_table, component_rates, weights, quantile_points, columns
+    )
+    return _assemble_aggs(agg_types, component_rates.shape[1], mean, std, quantiles if quantile_points else None)
 
 
 def build_branch_rates(
@@ -152,7 +198,7 @@ def build_branch_rates(
         branch_index_table: composite branches represented as rows of indices into component_rates
         component_rates: component realization rates with shape (n component branches, n IMTL)
         out: a float64, C ordered array with shape (n IMTL, n branches) to write the rates into, or None for a new
-            array. Writing into an array used for every task is about twice as fast as new memory.
+            array. Writing into an array used again is about twice as fast as new memory.
 
     Returns:
         The rates array with shape (n IMTL, n branches), out if given.
@@ -161,11 +207,7 @@ def build_branch_rates(
         IndexError: if the branch index table refers to a component branch not in component_rates.
         ValueError: if out does not have the shape, dtype or order of the rates.
     """
-    if branch_index_table.max() >= len(component_rates):
-        raise IndexError(
-            f"branch index table refers to component branch {branch_index_table.max()} "
-            f"but there are only {len(component_rates)} component branches"
-        )
+    _check_branch_index_table(branch_index_table, component_rates)
     if out is None:
         return calculators.composite_rates(branch_index_table, component_rates)
     shape = (component_rates.shape[1], branch_index_table.shape[0])
@@ -175,24 +217,6 @@ def build_branch_rates(
         )
     calculators.composite_rates_into(branch_index_table, component_rates, out, calculators.COMPOSITE_RATES_BLOCK)
     return out
-
-
-# each thread's buffer for the composite rates, kept between tasks. A worker process runs its tasks one at a time
-# in one thread, but test_end_to_end runs them on a ThreadPoolExecutor, two or more at once in one process
-_thread_local = threading.local()
-
-
-def _composite_rates_buffer(shape: tuple[int, int]) -> 'npt.NDArray':
-    """This thread's buffer for composite rates with the given shape, the same array for every task.
-
-    The buffer stays allocated between tasks: about 345 MB per worker for NSHM_v1.0.4, which each task allocated
-    anyway.
-    """
-    buffer = getattr(_thread_local, "composite_rates", None)
-    if buffer is None or buffer.shape != shape:
-        buffer = None  # release the old buffer before allocating the new one
-        _thread_local.composite_rates = buffer = np.empty(shape)
-    return buffer
 
 
 def calc_aggregation(task_args: AggTaskArgs, shared_args: AggSharedArgs) -> None:
@@ -233,18 +257,12 @@ def calc_aggregation(task_args: AggTaskArgs, shared_args: AggSharedArgs) -> None
 
     log.debug('worker %s: rates_table %s', worker_name, component_rates_array.shape)
 
-    rates_shape = (component_rates_array.shape[1], branch_index_table.shape[0])
-    composite_rates = build_branch_rates(
-        branch_index_table, component_rates_array, out=_composite_rates_buffer(rates_shape)
+    log.info("worker %s:  calculating aggregates . . . ", worker_name)
+    hazard = calculate_aggs_from_components(
+        branch_index_table, component_rates_array, weights, agg_types, shared_args.branch_index_columns
     )
     time3 = time.perf_counter()
-    log.debug("worker %s: time to build_branch_rates %0.2f seconds", worker_name, time3 - time2)
-
-    log.info("worker %s:  calculating aggregates . . . ", worker_name)
-    bounds = calculators.composite_rate_bounds(shared_args.branch_index_columns, component_rates_array)
-    hazard = calculate_aggs(composite_rates, weights, agg_types, bounds)
-    time4 = time.perf_counter()
-    log.debug("worker %s: time to calculate aggs %0.2f seconds", worker_name, time4 - time3)
+    log.debug("worker %s: time to calculate aggs %0.2f seconds", worker_name, time3 - time2)
 
     probs = calculators.rate_to_prob(hazard, 1.0)
     if shared_args.skip_save:
@@ -252,5 +270,5 @@ def calc_aggregation(task_args: AggTaskArgs, shared_args: AggSharedArgs) -> None
     else:
         log.info("worker %s saving result . . . ", worker_name)
         save_aggregations(probs, location, vs30, imt, agg_types, hazard_model_id, compatibility_key)
-    time5 = time.perf_counter()
-    log.info("worker %s time to perform one aggregation %0.2f seconds", worker_name, time5 - time0)
+    time4 = time.perf_counter()
+    log.info("worker %s time to perform one aggregation %0.2f seconds", worker_name, time4 - time0)
