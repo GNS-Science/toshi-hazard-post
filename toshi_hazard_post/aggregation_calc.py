@@ -90,10 +90,6 @@ def _quantile_points(agg_types: Sequence[str]) -> list[float]:
     return [float(agg) for agg in agg_types if _is_float(agg)]
 
 
-def _needs_mean_std(agg_types: Sequence[str]) -> bool:
-    return any(agg in agg_types for agg in ("mean", "std", "cov"))
-
-
 def _assemble_aggs(
     agg_types: Sequence[str],
     nlevels: int,
@@ -114,30 +110,6 @@ def _assemble_aggs(
     return aggs
 
 
-def calculate_aggs(branch_rates: 'npt.NDArray', weights: 'npt.NDArray', agg_types: Sequence[str]) -> 'npt.NDArray':
-    """Calculate weighted aggregate statistics of the composite realizations.
-
-    Args:
-        branch_rates: hazard rates for every composite realization of the model with dimensions (IMTL, branch)
-        weights: one dimensional array of weights for composite branches with dimensions (branch,)
-        agg_types: the aggregate statistics to be calculated (e.g., "mean", "0.5") with dimension (agg_type,)
-
-    Returns:
-        hazard: aggregate rates array with dimension (agg_type, IMTL)
-    """
-    log.debug("branch_rates with shape %s", branch_rates.shape)
-    log.debug("weights with shape %s", weights.shape)
-    log.debug("agg_types %s", agg_types)
-
-    mean = std = quantiles = None
-    if _needs_mean_std(agg_types):
-        mean, std = calculators.weighted_avg_and_std(branch_rates, weights)
-    quantile_points = _quantile_points(agg_types)
-    if quantile_points:
-        quantiles = calculators.weighted_quantiles(branch_rates, weights, quantile_points)
-    return _assemble_aggs(agg_types, branch_rates.shape[0], mean, std, quantiles)
-
-
 def _check_branch_index_table(branch_index_table: 'npt.NDArray', component_rates: 'npt.NDArray') -> None:
     if branch_index_table.max() >= len(component_rates):
         raise IndexError(
@@ -155,9 +127,8 @@ def calculate_aggs_from_components(
 ) -> 'npt.NDArray':
     """Calculate weighted aggregate statistics of the composite realizations from the component realizations.
 
-    The same as calculate_aggs() of the rates from build_branch_rates(), without building the rates. The quantiles
-    are found with bounds on the rates of each level, so they can differ from those of calculate_aggs() by floating
-    point rounding (see calculators.composite_rate_aggs()).
+    The rate of a composite realization is the sum of the rates of its component realizations. The aggregates are
+    calculated without building the array of composite rates (see calculators.composite_rate_aggs()).
 
     Args:
         branch_index_table: composite branches represented as rows of indices into component_rates
@@ -179,25 +150,6 @@ def calculate_aggs_from_components(
         branch_index_table, component_rates, weights, quantile_points, columns
     )
     return _assemble_aggs(agg_types, component_rates.shape[1], mean, std, quantiles if quantile_points else None)
-
-
-def build_branch_rates(branch_index_table: 'npt.NDArray', component_rates: 'npt.NDArray') -> 'npt.NDArray':
-    """Calculate the rate for the composite branches in the logic tree.
-
-    The rate for a composite branch is the sum of rates of the component branches.
-
-    Args:
-        branch_index_table: composite branches represented as rows of indices into component_rates
-        component_rates: component realization rates with shape (n component branches, n IMTL)
-
-    Returns:
-        The rates array with shape (n IMTL, n branches)
-
-    Raises:
-        IndexError: if the branch index table refers to a component branch not in component_rates.
-    """
-    _check_branch_index_table(branch_index_table, component_rates)
-    return calculators.composite_rates(branch_index_table, component_rates)
 
 
 def calc_aggregation(task_args: AggTaskArgs, shared_args: AggSharedArgs) -> None:

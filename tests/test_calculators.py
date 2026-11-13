@@ -393,7 +393,7 @@ def test_quantiles_of_many_branches():
 def test_warm_up_compiles_the_kernel_for_the_types_of_an_aggregation():
     calculators.warm_up()
     signatures = list(calculators._select_quantiles.signatures)
-    # float64 values in C order with an 8 quantile list, as passed by calculate_aggs()
+    # float64 values in C order with an 8 quantile list, the types of an aggregation
     rng = np.random.default_rng(3)
     weighted_quantiles(rng.random((2, 10_000)), rng.random(10_000), [0.005, 0.025, 0.1, 0.5, 0.9, 0.975, 0.995, 1.0])
     assert len(signatures) == 1

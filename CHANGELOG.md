@@ -66,7 +66,6 @@
 - `calculators.weighted_quantiles` takes values with shape (IMTL, branch) and returns the quantiles of every level
   with shape (quantile, IMTL), rather than taking the values of a single level.
 - `calculators.weighted_avg_and_std` takes values with shape (IMTL, branch) rather than (branch, IMTL).
-- `aggregation_calc.calculate_aggs` takes composite rates with shape (IMTL, branch) rather than (branch, IMTL).
 - The error raised when a job's realizations do not match the component branches reports counts and the first few
   missing digests rather than every digest.
 - `aggregation_calc.AggSharedArgs` has the names of the shared memory segments in the new required fields
@@ -90,6 +89,9 @@
   `aggregation_calc.convert_probs_to_rates`, `aggregation_calc.load_realizations`,
   `aggregation_calc.create_component_array` and `aggregation_calc.AggSharedArgs.component_digests`.
 - `constants.WEIGHTS_SHM_NAME` and `constants.BRANCH_INDEX_TABLE_SHM_NAME`: each run now names its own segments.
+- `aggregation_calc.calculate_aggs` and `aggregation_calc.build_branch_rates`: the aggregates are calculated from
+  the component rates by `aggregation_calc.calculate_aggs_from_components`, without building the composite rates.
+  `calculators.composite_rates` still builds them.
 
 ## [0.7.4] - 2026-08-17
 ### Fixed
