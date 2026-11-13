@@ -584,6 +584,9 @@ def weighted_quantiles(
     if nbins < 4:
         raise ValueError("nbins must be at least 4")
     nlevels = values.shape[0]
+    lo: npt.NDArray[np.float64]
+    hi: npt.NDArray[np.float64]
+    hi_finite: npt.NDArray[np.float64]
     if bounds is None:
         has_range = False
         lo = hi = hi_finite = np.zeros(nlevels)
