@@ -22,6 +22,15 @@ from toshi_hazard_post.calculators import (
 )
 
 
+def run_as_python(monkeypatch):
+    """Replace every numba kernel in calculators with its plain Python function, so that a kernel and the helpers it
+    calls all run in Python. Coverage cannot trace compiled code, and Python checks every array index where numba
+    reads past the end of an array without an error."""
+    for name, value in list(vars(calculators).items()):
+        if hasattr(value, "py_func"):
+            monkeypatch.setattr(calculators, name, value.py_func)
+
+
 class TestProbRate(unittest.TestCase):
     def setUp(self):
         self._probs = np.arange(0.1, 1.0, 0.1)
@@ -65,8 +74,15 @@ def fsum_mean_std(values, weights):
     return np.array(mean), np.array(std)
 
 
-# coverage cannot trace numba compiled code, so the kernels are also run as plain Python (py_func)
-@pytest.mark.parametrize("func", [weighted_avg_and_std, weighted_avg_and_std.py_func], ids=["jit", "python"])
+@pytest.fixture(params=["jit", "python"])
+def func(request, monkeypatch):
+    """weighted_avg_and_std, compiled or run as plain Python (see run_as_python)."""
+    if request.param == "python":
+        run_as_python(monkeypatch)
+        return calculators.weighted_avg_and_std
+    return weighted_avg_and_std
+
+
 class TestMeanStd:
     def test_weighted_avg_and_std(self, func, weights_and_values):
         weights, values = weights_and_values
@@ -234,11 +250,11 @@ def quantile_cases():
     }
 
 
-# coverage cannot trace numba compiled code, so the kernel is also run as plain Python (py_func)
+# the quantile kernels compiled, or run as plain Python (see run_as_python)
 @pytest.fixture(params=["jit", "python"])
 def quantile_kernel(request, monkeypatch):
     if request.param == "python":
-        monkeypatch.setattr(calculators, '_select_quantiles', calculators._select_quantiles.py_func)
+        run_as_python(monkeypatch)
 
 
 @pytest.mark.usefixtures("quantile_kernel")
@@ -502,11 +518,11 @@ def aggs_of_composite_rates(branch_index_table, component_rates, weights, quanti
 COMPONENT_AGGS_QUANTILES = [0.0, 0.005, 0.01, 0.1, 0.5, 0.9, 0.975, 1.0]
 
 
+# the composite rate aggregate kernels compiled, or run as plain Python (see run_as_python)
 @pytest.fixture(params=["jit", "python"])
 def component_aggs_kernel(request, monkeypatch):
     if request.param == "python":
-        for name in ('_composite_rate_aggs', '_pass_a', '_pass_b'):
-            monkeypatch.setattr(calculators, name, getattr(calculators, name).py_func)
+        run_as_python(monkeypatch)
 
 
 @pytest.mark.usefixtures("component_aggs_kernel")
@@ -538,6 +554,20 @@ class TestCompositeRateAggs:
             table, component_rates, weights, COMPONENT_AGGS_QUANTILES, columns, 16384, 4096
         )
         # bit-identical, with NaN equal to NaN (the mean and std of the level with an infinite rate)
+        for a, e in zip(actual, expected, strict=True):
+            np.testing.assert_array_equal(a, e, strict=True)
+
+    def test_leading_blocks_without_weight(self):
+        # the deviations are taken from the mean of the first block with weight, worked out by the kernel itself
+        # rather than by _shift(), so the blocks before it must be skipped the same way
+        table, component_rates, weights, columns = component_aggs_case(4, 5000)
+        weights[: 2 * SUM_BLOCK_SIZE + 5] = 0.0
+
+        actual = calculators.composite_rate_aggs(
+            table, component_rates, weights, COMPONENT_AGGS_QUANTILES, columns, nbins=64, sort_size=16
+        )
+
+        expected = aggs_of_composite_rates(table, component_rates, weights, COMPONENT_AGGS_QUANTILES, columns, 64, 16)
         for a, e in zip(actual, expected, strict=True):
             np.testing.assert_array_equal(a, e, strict=True)
 
