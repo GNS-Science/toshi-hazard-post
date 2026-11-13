@@ -76,6 +76,7 @@ def shared_args() -> AggSharedArgs:
         branch_index_table_dtype="<u2",
         weights_shm_name="weights",
         branch_index_table_shm_name="index",
+        branch_index_columns=[np.zeros(1, dtype=np.uint16)],
         skip_save=True,
     )
 

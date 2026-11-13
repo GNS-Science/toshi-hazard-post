@@ -28,7 +28,7 @@ from toshi_hazard_post.data import (
     group_batch_rows,
 )
 from toshi_hazard_post.local_config import NUM_WORKERS
-from toshi_hazard_post.logic_tree import HazardLogicTree, build_branch_index_table
+from toshi_hazard_post.logic_tree import HazardLogicTree, branch_index_columns, build_branch_index_table
 
 if TYPE_CHECKING:
     import numpy.typing as npt
@@ -209,6 +209,7 @@ def run_aggregation(args: AggregationArgs, pool_executor: Executor | None = None
         branch_index_table_dtype=branch_index_table.dtype.str,
         weights_shm_name=f"{run_id}_weights",
         branch_index_table_shm_name=f"{run_id}_index",
+        branch_index_columns=branch_index_columns(branch_index_table),
         agg_types=agg_types,
         hazard_model_id=args.general.hazard_model_id,
         compatibility_key=args.general.compatibility_key,

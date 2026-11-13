@@ -19,6 +19,7 @@ from toshi_hazard_post.logic_tree import (
     HazardComponentBranch,
     HazardLogicTree,
     _branch_hash_digest,
+    branch_index_columns,
     build_branch_index_table,
     registry,
 )
@@ -154,6 +155,12 @@ def test_registered_digests_unchanged(source_logic_tree, gmcm_logic_tree):
             gmcm_entry = registry.gmm_registry.get_by_identity(branch.gmcm_branches[0].registry_identity)
             assert branch.source_hash_digest == source_entry.hash_digest
             assert branch.gmcm_hash_digest == gmcm_entry.hash_digest
+
+
+def test_branch_index_columns():
+    index_table = np.array([[3, 0], [1, 0], [3, 2]])
+    columns = branch_index_columns(index_table)
+    assert [column.tolist() for column in columns] == [[1, 3], [0, 2]]
 
 
 def test_build_branch_index_table():

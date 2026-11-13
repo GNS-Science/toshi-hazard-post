@@ -60,6 +60,8 @@ class AggSharedArgs:
         branch_index_table_dtype: the data type of the branch index table array.
         weights_shm_name: the name of the shared memory segment holding the weights.
         branch_index_table_shm_name: the name of the shared memory segment holding the branch index table.
+        branch_index_columns: the component branches in each column of the branch index table, used to bound the
+            composite rates of each level for the quantiles (see logic_tree.branch_index_columns()).
         skip_save: set to True if skipping saving the aggregations. Used when debugging to avoid writing to a database.
     """
 
@@ -71,86 +73,83 @@ class AggSharedArgs:
     branch_index_table_dtype: str
     weights_shm_name: str
     branch_index_table_shm_name: str
+    branch_index_columns: list['npt.NDArray']
     skip_save: bool
 
 
-def calculate_aggs(branch_rates: 'npt.NDArray', weights: 'npt.NDArray', agg_types: Sequence[str]) -> 'npt.NDArray':
-    """Calculate weighted aggregate statistics of the composite realizations.
+def _is_float(value: str) -> bool:
+    try:
+        float(value)
+        return True
+    except ValueError:
+        return False
 
-    Args:
-        branch_rates: hazard rates for every composite realization of the model with dimensions (IMTL, branch)
-        weights: one dimensional array of weights for composite branches with dimensions (branch,)
-        agg_types: the aggregate statistics to be calculated (e.g., "mean", "0.5") with dimension (agg_type,)
 
-    Returns:
-        hazard: aggregate rates array with dimension (agg_type, IMTL)
-    """
-    log.debug("branch_rates with shape %s", branch_rates.shape)
-    log.debug("weights with shape %s", weights.shape)
-    log.debug("agg_types %s", agg_types)
+def _quantile_points(agg_types: Sequence[str]) -> list[float]:
+    """The quantiles among the aggregate statistics, in order."""
+    return [float(agg) for agg in agg_types if _is_float(agg)]
 
-    def is_float(value):
-        try:
-            float(value)
-            return True
-        except ValueError:
-            return False
 
-    def index(lst, value):
-        try:
-            return lst.index(value)
-        except ValueError:
-            pass
-        return None
-
-    idx_mean = index(agg_types, "mean")
-    idx_std = index(agg_types, "std")
-    idx_cov = index(agg_types, "cov")
-    idx_quantile = [is_float(agg) for agg in agg_types]
-    quantile_points = [float(pt) for pt in agg_types if is_float(pt)]
-
-    nlevels = branch_rates.shape[0]
-    naggs = len(agg_types)
-    aggs = np.empty((naggs, nlevels))
-
-    if (idx_mean is not None) | (idx_std is not None) | (idx_cov is not None):
-        mean, std = calculators.weighted_avg_and_std(branch_rates, weights)
-        cov = calculators.cov(mean, std)
-    if quantile_points:
-        aggs[idx_quantile, :] = calculators.weighted_quantiles(branch_rates, weights, quantile_points)
-
-    if idx_mean is not None:
-        aggs[idx_mean, :] = mean
-    if idx_std is not None:
-        aggs[idx_std, :] = std
-    if idx_cov is not None:
-        aggs[idx_cov, :] = cov
-
+def _assemble_aggs(
+    agg_types: Sequence[str],
+    nlevels: int,
+    mean: 'npt.NDArray | None',
+    std: 'npt.NDArray | None',
+    quantiles: 'npt.NDArray | None',
+) -> 'npt.NDArray':
+    """The aggregates in the order of agg_types (agg_type, IMTL), from the mean, std and quantiles (quantile, IMTL)
+    in the order of _quantile_points(). Each is None if no aggregate needs it."""
+    aggs = np.empty((len(agg_types), nlevels))
+    if quantiles is not None:
+        aggs[[_is_float(agg) for agg in agg_types], :] = quantiles
+    if mean is not None and std is not None:
+        for agg, value in (("mean", mean), ("std", std), ("cov", calculators.cov(mean, std))):
+            if agg in agg_types:
+                aggs[list(agg_types).index(agg), :] = value
     log.debug("agg with shape %s", aggs.shape)
     return aggs
 
 
-def build_branch_rates(branch_index_table: 'npt.NDArray', component_rates: 'npt.NDArray') -> 'npt.NDArray':
-    """Calculate the rate for the composite branches in the logic tree.
-
-    The rate for a composite branch is the sum of rates of the component branches.
-
-    Args:
-        branch_index_table: composite branches represented as rows of indices into component_rates
-        component_rates: component realization rates with shape (n component branches, n IMTL)
-
-    Returns:
-        The rates array with shape (n IMTL, n branches)
-
-    Raises:
-        IndexError: if the branch index table refers to a component branch not in component_rates.
-    """
+def _check_branch_index_table(branch_index_table: 'npt.NDArray', component_rates: 'npt.NDArray') -> None:
     if branch_index_table.max() >= len(component_rates):
         raise IndexError(
             f"branch index table refers to component branch {branch_index_table.max()} "
             f"but there are only {len(component_rates)} component branches"
         )
-    return calculators.composite_rates(branch_index_table, component_rates)
+
+
+def calculate_aggs_from_components(
+    branch_index_table: 'npt.NDArray',
+    component_rates: 'npt.NDArray',
+    weights: 'npt.NDArray',
+    agg_types: Sequence[str],
+    columns: Sequence['npt.NDArray'],
+) -> 'npt.NDArray':
+    """Calculate weighted aggregate statistics of the composite realizations from the component realizations.
+
+    The rate of a composite realization is the sum of the rates of its component realizations. The aggregates are
+    calculated without building the array of composite rates (see calculators.composite_rate_aggs()).
+
+    Args:
+        branch_index_table: composite branches represented as rows of indices into component_rates
+        component_rates: component realization rates with shape (n component branches, n IMTL)
+        weights: one dimensional array of weights for composite branches with dimensions (branch,)
+        agg_types: the aggregate statistics to be calculated (e.g., "mean", "0.5") with dimension (agg_type,)
+        columns: the component branches in each column of the branch index table (see
+            logic_tree.branch_index_columns())
+
+    Returns:
+        hazard: aggregate rates array with dimension (agg_type, IMTL)
+
+    Raises:
+        IndexError: if the branch index table refers to a component branch not in component_rates.
+    """
+    _check_branch_index_table(branch_index_table, component_rates)
+    quantile_points = _quantile_points(agg_types)
+    mean, std, quantiles = calculators.composite_rate_aggs(
+        branch_index_table, component_rates, weights, quantile_points, columns
+    )
+    return _assemble_aggs(agg_types, component_rates.shape[1], mean, std, quantiles if quantile_points else None)
 
 
 def calc_aggregation(task_args: AggTaskArgs, shared_args: AggSharedArgs) -> None:
@@ -191,14 +190,12 @@ def calc_aggregation(task_args: AggTaskArgs, shared_args: AggSharedArgs) -> None
 
     log.debug('worker %s: rates_table %s', worker_name, component_rates_array.shape)
 
-    composite_rates = build_branch_rates(branch_index_table, component_rates_array)
-    time3 = time.perf_counter()
-    log.debug("worker %s: time to build_branch_rates %0.2f seconds", worker_name, time3 - time2)
-
     log.info("worker %s:  calculating aggregates . . . ", worker_name)
-    hazard = calculate_aggs(composite_rates, weights, agg_types)
-    time4 = time.perf_counter()
-    log.debug("worker %s: time to calculate aggs %0.2f seconds", worker_name, time4 - time3)
+    hazard = calculate_aggs_from_components(
+        branch_index_table, component_rates_array, weights, agg_types, shared_args.branch_index_columns
+    )
+    time3 = time.perf_counter()
+    log.debug("worker %s: time to calculate aggs %0.2f seconds", worker_name, time3 - time2)
 
     probs = calculators.rate_to_prob(hazard, 1.0)
     if shared_args.skip_save:
@@ -206,5 +203,5 @@ def calc_aggregation(task_args: AggTaskArgs, shared_args: AggSharedArgs) -> None
     else:
         log.info("worker %s saving result . . . ", worker_name)
         save_aggregations(probs, location, vs30, imt, agg_types, hazard_model_id, compatibility_key)
-    time5 = time.perf_counter()
-    log.info("worker %s time to perform one aggregation %0.2f seconds", worker_name, time5 - time0)
+    time4 = time.perf_counter()
+    log.info("worker %s time to perform one aggregation %0.2f seconds", worker_name, time4 - time0)

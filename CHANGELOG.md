@@ -39,12 +39,35 @@
   (1267 MB to 105 MB RSS) while batches are loaded. Peak parent memory is unchanged, at about 1.36 GB for
   NSHM_v1.0.4: it is reached while the weights and branch index table are built, before the logic tree is released.
   ([#110](https://github.com/GNS-Science/toshi-hazard-post/issues/110))
+- The weighted mean, std and quantiles of each (location, imt) task are calculated straight from the component rates,
+  without building the ~345 MB array of composite rates that NSHM_v1.0.4 needs. Each level takes two passes over
+  the composite branches, each rate summed from the component rates as it is needed. The first pass gives the mean
+  and std, from blocks of 256 branches combined afterwards, and puts each rate in one of 16384 quantile bins,
+  keeping only its bin (2 bytes per branch). The bins are set from bounds on each level's rates, worked out from
+  the component rates, so no pass is needed to find the smallest and largest rate. The second pass sums again only
+  the rates in the bins next to each quantile. Before, the task wrote the composite rates to new memory and read
+  each level back five times, so it was limited by memory bandwidth.
+  - On an 18 core / 36 thread machine with NSHM_v1.0.4, a task takes 0.33 s instead of 0.79 s with 18 workers,
+    and 0.51 s instead of 1.27 s with 30. Throughput levels off at 55-59 tasks per second from 18 workers, instead
+    of about 24. The task now moves about 350 MiB to and from memory instead of about 2.6 GiB, and
+    uses about a fifth of the memory bandwidth at 18 workers, so the limit is now the physical cores.
+  - On real realizations, a task takes 0.37 s instead of 0.85 s with 18 workers and 0.67 s instead of 1.43 s with
+    30, and the run 47 s instead of 77 s and 36 s instead of 70 s. Peak machine memory falls from about 22 GB to
+    14 GB with 18 workers, and from about 27 GB to 14 GB with 30.
+  - Quantiles change by floating point rounding only (up to 4e-13 relative), because the cumulative weights are
+    summed by bin, and the saved float32 curves are unchanged. Mean and std change by rounding only (up to ~1e-15
+    relative, closer to a long double reference than before), and a std much smaller than its mean is now accurate
+    to ~2e-16 instead of ~9e-12. ([#107](https://github.com/GNS-Science/toshi-hazard-post/issues/107))
+- New `calculators.composite_rate_aggs` and `aggregation_calc.calculate_aggs_from_components` calculate the
+  aggregates from the component rates and the branch index table; `calc_aggregation` uses them.
+- `calculators.weighted_quantiles` takes optional `bounds` on the values of each level, from the new
+  `calculators.composite_rate_bounds`. `aggregation_calc.AggSharedArgs` has the new required
+  field `branch_index_columns`, from the new `logic_tree.branch_index_columns`.
 - `aggregation_calc.AggTaskArgs` has the job's probabilities in `probs` instead of `table_filepath`.
 - New `data.group_batch_rows` finds the rows of each job in a batch table, for `data.get_job_probs`.
 - `calculators.weighted_quantiles` takes values with shape (IMTL, branch) and returns the quantiles of every level
   with shape (quantile, IMTL), rather than taking the values of a single level.
 - `calculators.weighted_avg_and_std` takes values with shape (IMTL, branch) rather than (branch, IMTL).
-- `aggregation_calc.calculate_aggs` takes composite rates with shape (IMTL, branch) rather than (branch, IMTL).
 - The error raised when a job's realizations do not match the component branches reports counts and the first few
   missing digests rather than every digest.
 - `aggregation_calc.AggSharedArgs` has the names of the shared memory segments in the new required fields
@@ -68,6 +91,9 @@
   `aggregation_calc.convert_probs_to_rates`, `aggregation_calc.load_realizations`,
   `aggregation_calc.create_component_array` and `aggregation_calc.AggSharedArgs.component_digests`.
 - `constants.WEIGHTS_SHM_NAME` and `constants.BRANCH_INDEX_TABLE_SHM_NAME`: each run now names its own segments.
+- `aggregation_calc.calculate_aggs` and `aggregation_calc.build_branch_rates`: the aggregates are calculated from
+  the component rates by `aggregation_calc.calculate_aggs_from_components`, without building the composite rates.
+  `calculators.composite_rates` still builds them.
 
 ## [0.7.4] - 2026-08-17
 ### Fixed

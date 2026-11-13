@@ -9,9 +9,10 @@ import pytest
 import toshi_hazard_post.calculators as calculators
 from toshi_hazard_post.calculators import (
     SUM_BLOCK_SIZE,
+    _block_weighted_sum,
+    _block_weighted_sum_sq_dev,
     _blocked_sum,
-    _blocked_weighted_sum,
-    _blocked_weighted_sum_sq_dev,
+    composite_rate_bounds,
     composite_rates,
     cov,
     prob_to_rate,
@@ -19,6 +20,15 @@ from toshi_hazard_post.calculators import (
     weighted_avg_and_std,
     weighted_quantiles,
 )
+
+
+def run_as_python(monkeypatch):
+    """Replace every numba kernel in calculators with its plain Python function, so that a kernel and the helpers it
+    calls all run in Python. Coverage cannot trace compiled code, and Python checks every array index where numba
+    reads past the end of an array without an error."""
+    for name, value in list(vars(calculators).items()):
+        if hasattr(value, "py_func"):
+            monkeypatch.setattr(calculators, name, value.py_func)
 
 
 class TestProbRate(unittest.TestCase):
@@ -54,8 +64,25 @@ def weights_and_values():
     return weights, np.vstack((values, values * 2.0))
 
 
-# coverage cannot trace numba compiled code, so the kernels are also run as plain Python (py_func)
-@pytest.mark.parametrize("func", [weighted_avg_and_std, weighted_avg_and_std.py_func], ids=["jit", "python"])
+def fsum_mean_std(values, weights):
+    """The weighted mean and std of each level, with exactly rounded sums."""
+    sum_weights = math.fsum(weights)
+    mean = [math.fsum(weights * level) / sum_weights for level in values]
+    std = [
+        math.sqrt(math.fsum(weights * (level - m) ** 2) / sum_weights) for level, m in zip(values, mean, strict=True)
+    ]
+    return np.array(mean), np.array(std)
+
+
+@pytest.fixture(params=["jit", "python"])
+def func(request, monkeypatch):
+    """weighted_avg_and_std, compiled or run as plain Python (see run_as_python)."""
+    if request.param == "python":
+        run_as_python(monkeypatch)
+        return calculators.weighted_avg_and_std
+    return weighted_avg_and_std
+
+
 class TestMeanStd:
     def test_weighted_avg_and_std(self, func, weights_and_values):
         weights, values = weights_and_values
@@ -98,6 +125,36 @@ class TestMeanStd:
         with pytest.raises(ValueError, match="one entry for each branch"):
             func(values, np.ones(10))
 
+    def test_std_much_smaller_than_mean(self, func):
+        # the deviations are taken from a value near the mean, so they keep their precision
+        rng = np.random.default_rng(4)
+        values = 1e-3 + 1e-12 * rng.random((1, 10_000))
+        weights = rng.random(10_000)
+
+        mean, std = func(values, weights)
+
+        mean_expected, std_expected = fsum_mean_std(values, weights)
+        np.testing.assert_allclose(mean, mean_expected, rtol=1e-14)
+        np.testing.assert_allclose(std, std_expected, rtol=1e-13)
+
+    # lengths either side of a whole number of blocks, and leading blocks with no weight, which cannot give the
+    # value the deviations are taken from
+    @pytest.mark.parametrize("nbranches", [1, 3, SUM_BLOCK_SIZE - 1, SUM_BLOCK_SIZE + 1, 4 * SUM_BLOCK_SIZE + 3])
+    @pytest.mark.parametrize("zero_weight_blocks", [0, 2])
+    def test_block_boundaries(self, func, nbranches, zero_weight_blocks):
+        rng = np.random.default_rng(nbranches)
+        values = np.exp(rng.normal(0.0, 1.0, (2, nbranches)))
+        weights = rng.random(nbranches)
+        weights[: zero_weight_blocks * SUM_BLOCK_SIZE] = 0.0
+        if not weights.any():
+            weights[-1] = 1.0
+
+        mean, std = func(values, weights)
+
+        mean_expected, std_expected = fsum_mean_std(values, weights)
+        np.testing.assert_allclose(mean, mean_expected, rtol=1e-14)
+        np.testing.assert_allclose(std, std_expected, rtol=1e-13, atol=1e-300)
+
     def test_zero_mean(self, func, weights_and_values):
         weights, values = weights_and_values
         mean, std = func(values * 0.0, weights)
@@ -136,18 +193,19 @@ class TestBlockedSums:
         _, values = weights_and_values
         assert func(values) == pytest.approx(math.fsum(values), rel=1e-14)
 
-    @pytest.mark.parametrize("func", [_blocked_weighted_sum, _blocked_weighted_sum.py_func], ids=["jit", "python"])
-    def test_blocked_weighted_sum(self, func, weights_and_values):
+    @pytest.mark.parametrize("func", [_block_weighted_sum, _block_weighted_sum.py_func], ids=["jit", "python"])
+    def test_block_weighted_sum(self, func, weights_and_values):
         weights, values = weights_and_values
-        assert func(weights, values) == pytest.approx(math.fsum(weights * values), rel=1e-14)
+        expected = math.fsum(weights * (values - 0.3))
+        assert func(values, weights, 0, len(values), 0.3) == pytest.approx(expected, rel=1e-12, abs=1e-300)
 
     @pytest.mark.parametrize(
-        "func", [_blocked_weighted_sum_sq_dev, _blocked_weighted_sum_sq_dev.py_func], ids=["jit", "python"]
+        "func", [_block_weighted_sum_sq_dev, _block_weighted_sum_sq_dev.py_func], ids=["jit", "python"]
     )
-    def test_blocked_weighted_sum_sq_dev(self, func, weights_and_values):
+    def test_block_weighted_sum_sq_dev(self, func, weights_and_values):
         weights, values = weights_and_values
-        expected = math.fsum(weights * (values - 0.3) ** 2)
-        assert func(weights, values, 0.3) == pytest.approx(expected, rel=1e-14)
+        expected = math.fsum(weights * ((values - 0.3) - 0.1) ** 2)
+        assert func(values, weights, 0, len(values), 0.3, 0.1) == pytest.approx(expected, rel=1e-14, abs=1e-300)
 
 
 def reference_weighted_quantiles(values, weights, quantiles):
@@ -159,6 +217,11 @@ def reference_weighted_quantiles(values, weights, quantiles):
         quantiles_at_values /= np.sum(weights)
         wq.append(np.interp(quantiles, quantiles_at_values, level[sorter]))
     return np.array(wq).T
+
+
+def exact_bounds(values):
+    """The smallest, largest and largest finite value of each level."""
+    return values.min(axis=1), values.max(axis=1), np.where(np.isinf(values), -np.inf, values).max(axis=1)
 
 
 def quantile_cases():
@@ -187,11 +250,11 @@ def quantile_cases():
     }
 
 
-# coverage cannot trace numba compiled code, so the kernel is also run as plain Python (py_func)
+# the quantile kernels compiled, or run as plain Python (see run_as_python)
 @pytest.fixture(params=["jit", "python"])
 def quantile_kernel(request, monkeypatch):
     if request.param == "python":
-        monkeypatch.setattr(calculators, '_select_quantiles', calculators._select_quantiles.py_func)
+        run_as_python(monkeypatch)
 
 
 @pytest.mark.usefixtures("quantile_kernel")
@@ -221,7 +284,7 @@ class TestQuantiles:
 
     # with the default sizes the values of the cases are sorted directly, the smaller sizes put them in bins and
     # then put the values of crowded bins in bins again
-    @pytest.mark.parametrize("nbins,sort_size", [(65536, 4096), (64, 16), (4, 1)])
+    @pytest.mark.parametrize("nbins,sort_size", [(calculators.QUANTILE_NBINS, 4096), (64, 16), (4, 1)])
     @pytest.mark.parametrize("case", quantile_cases().keys())
     def test_matches_sorting_every_value(self, case, nbins, sort_size):
         values, weights = quantile_cases()[case]
@@ -231,6 +294,36 @@ class TestQuantiles:
         expected = reference_weighted_quantiles(values, weights, self.QUANTILES)
         assert quantiles.shape == (len(self.QUANTILES), values.shape[0])
         np.testing.assert_allclose(quantiles, expected, rtol=1e-10)
+
+    @pytest.mark.parametrize("slack", [0.0, 0.5], ids=["exact", "loose"])
+    @pytest.mark.parametrize("case", quantile_cases().keys())
+    def test_bounds_match_sorting_every_value(self, case, slack):
+        # the bounds only have to hold every value of a level: they set the bins, not the quantiles
+        values, weights = quantile_cases()[case]
+        lo, hi, hi_finite = exact_bounds(values)
+        widen = slack * (1.0 + np.abs(lo))
+
+        quantiles = weighted_quantiles(
+            values, weights, self.QUANTILES, nbins=64, sort_size=16, bounds=(lo - widen, hi + widen, hi_finite + widen)
+        )
+
+        expected = reference_weighted_quantiles(values, weights, self.QUANTILES)
+        np.testing.assert_allclose(quantiles, expected, rtol=1e-10)
+
+    @pytest.mark.parametrize("case", ["hazard curve like", "mostly zero", "an infinite value", "all equal"])
+    def test_exact_bounds_are_what_the_kernel_finds(self, case):
+        values, weights = quantile_cases()[case]
+
+        with_bounds = weighted_quantiles(
+            values, weights, self.QUANTILES, nbins=64, sort_size=16, bounds=exact_bounds(values)
+        )
+        without = weighted_quantiles(values, weights, self.QUANTILES, nbins=64, sort_size=16)
+
+        assert np.array_equal(with_bounds, without)
+
+    def test_bounds_must_have_one_entry_for_each_level(self):
+        with pytest.raises(ValueError, match="one entry for each level"):
+            weighted_quantiles(np.ones((3, 10)), np.ones(10), [0.5], bounds=(np.ones(2), np.ones(2), np.ones(2)))
 
     def test_equal_values_are_in_branch_order(self):
         # the weight of the last of the equal values sets where interpolation to the next value starts, so
@@ -300,7 +393,7 @@ def test_quantiles_of_many_branches():
 def test_warm_up_compiles_the_kernel_for_the_types_of_an_aggregation():
     calculators.warm_up()
     signatures = list(calculators._select_quantiles.signatures)
-    # float64 values in C order with an 8 quantile list, as passed by calculate_aggs()
+    # float64 values in C order with an 8 quantile list, the types of an aggregation
     rng = np.random.default_rng(3)
     weighted_quantiles(rng.random((2, 10_000)), rng.random(10_000), [0.005, 0.025, 0.1, 0.5, 0.9, 0.975, 0.995, 1.0])
     assert len(signatures) == 1
@@ -330,3 +423,205 @@ def test_composite_rates_single_component(func):
     rates = func(branch_index_table, component_rates)
 
     assert rates.tolist() == [[10.0, 1.0, 10.0], [20.0, 2.0, 20.0], [30.0, 3.0, 30.0]]
+
+
+def composite_rate_case():
+    """An index table with 3 columns drawing on separate component branches, and their component rates."""
+    rng = np.random.default_rng(5)
+    # 12 component branches x 5 levels, with zeros at the higher levels and one infinite rate
+    component_rates = np.exp(rng.normal(0.0, 1.0, (12, 5))) * np.logspace(-1, -5, 5)[None, :]
+    component_rates[rng.random((12, 5)) < 0.3] = 0.0
+    component_rates[:, 4] = 0.0
+    component_rates[5, 2] = np.inf
+    return component_rates, [np.array([0, 1, 2, 3]), np.array([4, 5, 6, 7]), np.array([8, 9, 10, 11])]
+
+
+def test_composite_rate_bounds_hold_every_composite_rate():
+    component_rates, columns = composite_rate_case()
+    rng = np.random.default_rng(6)
+    # some of the combinations of one component branch from each column
+    branch_index_table = np.stack([rng.choice(column, 20) for column in columns], axis=1)
+    rates = composite_rates(branch_index_table, component_rates)
+
+    lo, hi, hi_finite = composite_rate_bounds(columns, component_rates)
+
+    assert np.all(lo <= rates.min(axis=1))
+    assert np.all(hi >= rates.max(axis=1))
+    assert np.all(hi_finite >= np.where(np.isinf(rates), -np.inf, rates).max(axis=1))
+
+
+def test_composite_rate_bounds_are_exact_for_every_combination():
+    component_rates, columns = composite_rate_case()
+    branch_index_table = np.array(np.meshgrid(*columns, indexing='ij')).reshape(len(columns), -1).T
+    rates = composite_rates(branch_index_table, component_rates)
+
+    lo, hi, hi_finite = composite_rate_bounds(columns, component_rates)
+
+    assert lo.tolist() == rates.min(axis=1).tolist()
+    assert hi.tolist() == rates.max(axis=1).tolist()
+    assert hi_finite.tolist() == np.where(np.isinf(rates), -np.inf, rates).max(axis=1).tolist()
+    # the level with an infinite rate
+    assert hi[2] == np.inf and np.isfinite(hi_finite[2])
+
+
+# numba fixes the block size when it compiles, so smaller blocks are tested with the python function
+@pytest.mark.parametrize(
+    "jitted, block",
+    [(True, None), (False, 1), (False, 3), (False, None)],
+    ids=["jit", "python-1", "python-3", "python"],
+)
+def test_composite_rates_blocks(jitted, block, monkeypatch):
+    # 10 composite branches, not a whole number of blocks of 3
+    if block is not None:
+        monkeypatch.setattr(calculators, "COMPOSITE_RATES_BLOCK", block)
+    func = composite_rates if jitted else composite_rates.py_func
+    rng = np.random.default_rng(7)
+    component_rates = rng.random((7, 5))
+    branch_index_table = rng.integers(0, 7, (10, 3)).astype(np.uint16)
+    expected = np.empty((5, 10))
+    for i, row in enumerate(branch_index_table):
+        for j in range(5):
+            # the same order of additions as composite_rates, so that the rates are bit-identical
+            expected[j, i] = ((0.0 + component_rates[row[0], j]) + component_rates[row[1], j]) + component_rates[
+                row[2], j
+            ]
+
+    rates = func(branch_index_table, component_rates)
+
+    assert rates.tolist() == expected.tolist()
+
+
+def component_aggs_case(ncomponents, nbranches):
+    """An index table with ncomponents columns, each drawing on its own component branches, with component rates
+    that have zeros, a level of all zeros and an infinite rate, and weights of which some are zero."""
+    rng = np.random.default_rng(ncomponents)
+    per_column = 6
+    component_rates = np.exp(rng.normal(0.0, 1.0, (ncomponents * per_column, 6))) * np.logspace(-1, -6, 6)[None, :]
+    component_rates[rng.random(component_rates.shape) < 0.3] = 0.0
+    component_rates[:, 5] = 0.0
+    component_rates[2, 3] = np.inf
+    columns = [np.arange(k * per_column, (k + 1) * per_column) for k in range(ncomponents)]
+    branch_index_table = np.stack([rng.choice(column, nbranches) for column in columns], axis=1).astype(np.uint16)
+    weights = rng.random(nbranches) * (rng.random(nbranches) > 0.2)
+    return branch_index_table, component_rates, weights, columns
+
+
+def aggs_of_composite_rates(branch_index_table, component_rates, weights, quantiles, columns, nbins, sort_size):
+    """Mean, std and quantiles of the composite rates, from the composite rates array."""
+    rates = composite_rates(branch_index_table, component_rates)
+    mean, std = weighted_avg_and_std(rates, weights)
+    bounds = composite_rate_bounds(columns, component_rates)
+    wq = weighted_quantiles(rates, weights, quantiles, nbins=nbins, sort_size=sort_size, bounds=bounds)
+    return mean, std, wq
+
+
+COMPONENT_AGGS_QUANTILES = [0.0, 0.005, 0.01, 0.1, 0.5, 0.9, 0.975, 1.0]
+
+
+# the composite rate aggregate kernels compiled, or run as plain Python (see run_as_python)
+@pytest.fixture(params=["jit", "python"])
+def component_aggs_kernel(request, monkeypatch):
+    if request.param == "python":
+        run_as_python(monkeypatch)
+
+
+@pytest.mark.usefixtures("component_aggs_kernel")
+class TestCompositeRateAggs:
+    # the NSHM tables have 4 columns, which has its own loop
+    @pytest.mark.parametrize("ncomponents", [4, 3, 1])
+    # small bins and sorts, so that the bins holding the quantiles are put in bins again
+    @pytest.mark.parametrize("nbins, sort_size", [(64, 16), (16384, 4096)])
+    def test_same_as_from_composite_rates(self, ncomponents, nbins, sort_size):
+        table, component_rates, weights, columns = component_aggs_case(ncomponents, 5000)
+
+        actual = calculators.composite_rate_aggs(
+            table, component_rates, weights, COMPONENT_AGGS_QUANTILES, columns, nbins=nbins, sort_size=sort_size
+        )
+
+        expected = aggs_of_composite_rates(
+            table, component_rates, weights, COMPONENT_AGGS_QUANTILES, columns, nbins, sort_size
+        )
+        # bit-identical, with NaN equal to NaN (the mean and std of the level with an infinite rate)
+        for a, e in zip(actual, expected, strict=True):
+            np.testing.assert_array_equal(a, e, strict=True)
+
+    def test_small_table_is_sorted(self):
+        table, component_rates, weights, columns = component_aggs_case(4, 50)
+
+        actual = calculators.composite_rate_aggs(table, component_rates, weights, COMPONENT_AGGS_QUANTILES, columns)
+
+        expected = aggs_of_composite_rates(
+            table, component_rates, weights, COMPONENT_AGGS_QUANTILES, columns, 16384, 4096
+        )
+        # bit-identical, with NaN equal to NaN (the mean and std of the level with an infinite rate)
+        for a, e in zip(actual, expected, strict=True):
+            np.testing.assert_array_equal(a, e, strict=True)
+
+    def test_leading_blocks_without_weight(self):
+        # the deviations are taken from the mean of the first block with weight, worked out by the kernel itself
+        # rather than by _shift(), so the blocks before it must be skipped the same way
+        table, component_rates, weights, columns = component_aggs_case(4, 5000)
+        weights[: 2 * SUM_BLOCK_SIZE + 5] = 0.0
+
+        actual = calculators.composite_rate_aggs(
+            table, component_rates, weights, COMPONENT_AGGS_QUANTILES, columns, nbins=64, sort_size=16
+        )
+
+        expected = aggs_of_composite_rates(table, component_rates, weights, COMPONENT_AGGS_QUANTILES, columns, 64, 16)
+        for a, e in zip(actual, expected, strict=True):
+            np.testing.assert_array_equal(a, e, strict=True)
+
+    def test_no_quantiles(self):
+        table, component_rates, weights, columns = component_aggs_case(4, 5000)
+
+        mean, std, wq = calculators.composite_rate_aggs(table, component_rates, weights, [], columns)
+
+        expected_mean, expected_std = weighted_avg_and_std(composite_rates(table, component_rates), weights)
+        assert wq.shape == (0, 6)
+        np.testing.assert_array_equal(mean, expected_mean, strict=True)
+        np.testing.assert_array_equal(std, expected_std, strict=True)
+
+    def test_against_definition(self):
+        table, component_rates, weights, columns = component_aggs_case(4, 20_000)
+        rates = composite_rates(table, component_rates)
+
+        mean, std, wq = calculators.composite_rate_aggs(
+            table, component_rates, weights, COMPONENT_AGGS_QUANTILES, columns, nbins=64, sort_size=16
+        )
+
+        finite = [0, 1, 2, 4, 5]  # level 3 has an infinite rate, which has no meaningful mean
+        expected_mean, expected_std = fsum_mean_std(rates[finite], weights)
+        np.testing.assert_allclose(mean[finite], expected_mean, rtol=1e-12)
+        np.testing.assert_allclose(std[finite], expected_std, rtol=1e-10, atol=1e-300)
+        np.testing.assert_allclose(
+            wq, reference_weighted_quantiles(rates, weights, COMPONENT_AGGS_QUANTILES), rtol=1e-10
+        )
+
+
+@pytest.mark.parametrize(
+    "kwargs, match",
+    [
+        (dict(nbins=3), "nbins"),
+        (dict(nbins=65537), "nbins"),
+        (dict(weights=np.ones(7)), "weights"),
+        (dict(columns=[np.arange(2)]), "columns"),
+    ],
+)
+def test_composite_rate_aggs_rejects(kwargs, match):
+    table, component_rates, weights, columns = component_aggs_case(2, 10)
+    args = dict(
+        branch_index_table=table, component_rates=component_rates, weights=weights, quantiles=[0.5], columns=columns
+    )
+    args.update(kwargs)
+    with pytest.raises(ValueError, match=match):
+        calculators.composite_rate_aggs(**args)
+
+
+def test_warm_up_compiles_the_composite_rate_aggs_kernel_for_the_types_of_an_aggregation():
+    calculators.warm_up()
+    signatures = list(calculators._composite_rate_aggs.signatures)
+    # a uint16 index table and float64 rates, as calc_aggregation() passes
+    table, component_rates, weights, columns = component_aggs_case(4, 5000)
+    calculators.composite_rate_aggs(table, component_rates, weights, [0.005, 0.5, 0.995], columns)
+    assert len(signatures) == 1
+    assert calculators._composite_rate_aggs.signatures == signatures

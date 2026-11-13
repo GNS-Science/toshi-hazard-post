@@ -85,6 +85,18 @@ def build_branch_index_table(
     return indices.reshape(len(branch_hash_table), -1)
 
 
+def branch_index_columns(branch_index_table: npt.NDArray) -> list[npt.NDArray]:
+    """The component branches in each column of the branch index table, for calculators.composite_rate_bounds().
+
+    Args:
+        branch_index_table: composite branches as rows of indices into the component branches
+
+    Returns:
+        The sorted unique indices in each column of branch_index_table.
+    """
+    return [np.unique(branch_index_table[:, k]) for k in range(branch_index_table.shape[1])]
+
+
 class HazardComponentBranch:
     """A component branch of the combined (SRM + GMCM) logic tree comprised of an srm branch and a gmcm branch.
 
