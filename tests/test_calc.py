@@ -54,27 +54,6 @@ def test_build_branch_rates():
     assert rates.tolist() == [[11.0, 200.0], [22.0, 400.0], [33.0, 600.0]]
 
 
-def test_build_branch_rates_into_buffer():
-    component_rates = np.array([[1.0, 2.0, 3.0], [10.0, 20.0, 30.0], [100.0, 200.0, 300.0]])
-    index_table = np.array([[0, 1], [2, 2]], dtype=np.uint16)
-    out = np.full((3, 2), np.nan)
-
-    rates = aggregation_calc.build_branch_rates(index_table, component_rates, out=out)
-
-    assert rates is out
-    assert rates.tolist() == [[11.0, 200.0], [22.0, 400.0], [33.0, 600.0]]
-
-
-@pytest.mark.parametrize(
-    "out", [np.empty((2, 2)), np.empty((3, 2), dtype=np.float32), np.empty((2, 3)).T], ids=["shape", "dtype", "order"]
-)
-def test_build_branch_rates_rejects_unusable_buffer(out):
-    component_rates = np.array([[1.0, 2.0, 3.0], [10.0, 20.0, 30.0], [100.0, 200.0, 300.0]])
-    index_table = np.array([[0, 1], [2, 2]], dtype=np.uint16)
-    with pytest.raises(ValueError, match="out"):
-        aggregation_calc.build_branch_rates(index_table, component_rates, out=out)
-
-
 def test_build_branch_rates_index_out_of_range():
     component_rates = np.array([[1.0, 2.0], [10.0, 20.0]])
     index_table = np.array([[0, 2]], dtype=np.uint16)
@@ -127,19 +106,6 @@ def test_calculate_aggs(branch_rates):
     assert np.allclose(hazard_agg, expected)
 
 
-def test_calculate_aggs_with_bounds(branch_rates):
-    weights = np.array([0.1, 0.1, 0.2, 0.3, 0.1, 0.2])
-    agg_types = ['mean', 'std', 'cov', '0.6', '0.1']
-    # any bounds that hold the rates of each level, here wider than they need to be
-    bounds = (branch_rates.min(axis=1) - 1.0, branch_rates.max(axis=1) + 1.0, branch_rates.max(axis=1) + 1.0)
-
-    with_bounds = aggregation_calc.calculate_aggs(branch_rates, weights, agg_types, bounds)
-
-    np.testing.assert_allclose(
-        with_bounds, aggregation_calc.calculate_aggs(branch_rates, weights, agg_types), rtol=1e-12
-    )
-
-
 @pytest.mark.parametrize("agg_types", [['mean', 'std', 'cov', '0.6', '0.1'], ['0.9', 'cov', '0.005'], ['std']])
 def test_calculate_aggs_from_components(agg_types):
     rng = np.random.default_rng(1)
@@ -151,9 +117,14 @@ def test_calculate_aggs_from_components(agg_types):
 
     aggs = aggregation_calc.calculate_aggs_from_components(index_table, component_rates, weights, agg_types, columns)
 
+    # the aggregates of the composite rates, with the quantiles found with the bounds that the fused kernel uses
     rates = aggregation_calc.build_branch_rates(index_table, component_rates)
+    mean, std = calculators.weighted_avg_and_std(rates, weights)
     bounds = calculators.composite_rate_bounds(columns, component_rates)
-    expected = aggregation_calc.calculate_aggs(rates, weights, agg_types, bounds)
+    quantiles = calculators.weighted_quantiles(
+        rates, weights, aggregation_calc._quantile_points(agg_types), bounds=bounds
+    )
+    expected = aggregation_calc._assemble_aggs(agg_types, NLEVELS, mean, std, quantiles)
     assert aggs.tolist() == expected.tolist()
 
 

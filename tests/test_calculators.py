@@ -14,7 +14,6 @@ from toshi_hazard_post.calculators import (
     _blocked_sum,
     composite_rate_bounds,
     composite_rates,
-    composite_rates_into,
     cov,
     prob_to_rate,
     rate_to_prob,
@@ -449,10 +448,17 @@ def test_composite_rate_bounds_are_exact_for_every_combination():
     assert hi[2] == np.inf and np.isfinite(hi_finite[2])
 
 
-@pytest.mark.parametrize("func", [composite_rates_into, composite_rates_into.py_func], ids=["jit", "python"])
-@pytest.mark.parametrize("block", [1, 3, 4096])
-def test_composite_rates_into(func, block):
+# numba fixes the block size when it compiles, so smaller blocks are tested with the python function
+@pytest.mark.parametrize(
+    "jitted, block",
+    [(True, None), (False, 1), (False, 3), (False, None)],
+    ids=["jit", "python-1", "python-3", "python"],
+)
+def test_composite_rates_blocks(jitted, block, monkeypatch):
     # 10 composite branches, not a whole number of blocks of 3
+    if block is not None:
+        monkeypatch.setattr(calculators, "COMPOSITE_RATES_BLOCK", block)
+    func = composite_rates if jitted else composite_rates.py_func
     rng = np.random.default_rng(7)
     component_rates = rng.random((7, 5))
     branch_index_table = rng.integers(0, 7, (10, 3)).astype(np.uint16)
@@ -463,9 +469,8 @@ def test_composite_rates_into(func, block):
             expected[j, i] = ((0.0 + component_rates[row[0], j]) + component_rates[row[1], j]) + component_rates[
                 row[2], j
             ]
-    rates = np.full((5, 10), np.nan)
 
-    func(branch_index_table, component_rates, rates, block)
+    rates = func(branch_index_table, component_rates)
 
     assert rates.tolist() == expected.tolist()
 

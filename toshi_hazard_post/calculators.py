@@ -41,48 +41,18 @@ def rate_to_prob(rate: 'npt.NDArray', inv_time: float) -> 'npt.NDArray':
     return 1.0 - np.exp(-inv_time * rate)
 
 
-# number of composite branches whose rates are written one level at a time by composite_rates_into()
+# number of composite branches whose rates are written one level at a time by composite_rates()
 COMPOSITE_RATES_BLOCK = 4096
-
-
-@jit(nopython=True)
-def composite_rates_into(
-    branch_index_table: 'npt.NDArray', component_rates: 'npt.NDArray', rates: 'npt.NDArray', block: int
-) -> None:
-    """Calculate the rates of the composite branches into rates, see composite_rates().
-
-    The composite branches are taken a block at a time, and the rates of a block are written one level at a time,
-    so that each level is written in order rather than every level at once. The component rates of a level are
-    read from a transposed copy, small enough to stay in cache. Each rate is summed over the component branches in
-    column order, as composite_rate_bounds() relies on.
-
-    Writing into a buffer that is used again, rather than new memory, saves the operating system mapping and
-    zeroing that memory for every call, which takes about as long as the calculation.
-
-    Args:
-        branch_index_table: composite branches as rows of indices into component_rates (composite branch, component)
-        component_rates: rates of the component branches (component branch, IMTL)
-        rates: set to the rates of the composite branches (IMTL, composite branch)
-        block: the number of composite branches in a block
-    """
-    nbranches, ncomponents = branch_index_table.shape
-    nlevels = component_rates.shape[1]
-    component_rates_t = np.ascontiguousarray(component_rates.T)
-    for start in range(0, nbranches, block):
-        stop = min(start + block, nbranches)
-        for j in range(nlevels):
-            level_rates = component_rates_t[j]
-            row = rates[j]
-            for i in range(start, stop):
-                rate = 0.0
-                for k in range(ncomponents):
-                    rate += level_rates[branch_index_table[i, k]]
-                row[i] = rate
 
 
 @jit(nopython=True)
 def composite_rates(branch_index_table: 'npt.NDArray', component_rates: 'npt.NDArray') -> 'npt.NDArray':
     """Calculate the rates of the composite branches by summing the rates of their component branches.
+
+    The composite branches are taken a block at a time, and the rates of a block are written one level at a time,
+    so that each level is written in order rather than every level at once. The component rates of a level are
+    read from a transposed copy, small enough to stay in cache. Each rate is summed over the component branches in
+    column order, as composite_rate_bounds() relies on.
 
     The indices are not bounds checked, every entry of branch_index_table must be a valid row of component_rates.
 
@@ -93,8 +63,20 @@ def composite_rates(branch_index_table: 'npt.NDArray', component_rates: 'npt.NDA
     Returns:
         rates: hazard rates for the composite branches (IMTL, composite branch)
     """
-    rates = np.empty((component_rates.shape[1], branch_index_table.shape[0]))
-    composite_rates_into(branch_index_table, component_rates, rates, COMPOSITE_RATES_BLOCK)
+    nbranches, ncomponents = branch_index_table.shape
+    nlevels = component_rates.shape[1]
+    rates = np.empty((nlevels, nbranches))
+    component_rates_t = np.ascontiguousarray(component_rates.T)
+    for start in range(0, nbranches, COMPOSITE_RATES_BLOCK):
+        stop = min(start + COMPOSITE_RATES_BLOCK, nbranches)
+        for j in range(nlevels):
+            level_rates = component_rates_t[j]
+            row = rates[j]
+            for i in range(start, stop):
+                rate = 0.0
+                for k in range(ncomponents):
+                    rate += level_rates[branch_index_table[i, k]]
+                row[i] = rate
     return rates
 
 
@@ -665,7 +647,7 @@ COMPOSITE_RATE_AGGS_MAX_NBINS = 65536
 
 @jit(nopython=True, inline='always')
 def _composite_rate(branch_index_table: 'npt.NDArray', i: int, level_rates: 'npt.NDArray', ncomponents: int) -> float:
-    """The rate of composite branch i, summed in column order as composite_rates_into()."""
+    """The rate of composite branch i, summed in column order as composite_rates()."""
     if ncomponents == 4:  # the NSHM tables, unrolled: about 40% faster than the loop, with the same additions
         return (
             ((0.0 + level_rates[branch_index_table[i, 0]]) + level_rates[branch_index_table[i, 1]])

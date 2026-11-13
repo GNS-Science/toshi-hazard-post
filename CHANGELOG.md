@@ -37,43 +37,29 @@
   (1267 MB to 105 MB RSS) while batches are loaded. Peak parent memory is unchanged, at about 1.36 GB for
   NSHM_v1.0.4: it is reached while the weights and branch index table are built, before the logic tree is released.
   ([#110](https://github.com/GNS-Science/toshi-hazard-post/issues/110))
-- The weighted quantiles read each level of the composite rates twice instead of three times. The bins are set
-  from bounds on each level's composite rates, worked out from the component rates, instead of a pass to find the
-  smallest and largest rate, and the gathering pass works out each rate's bin again instead of storing it. The
-  quantile kernel also uses 16384 bins instead of 65536, so that its bin tables take less cache. For NSHM_v1.0.4 the
-  quantile step is about 1.5x faster with 18 to 30 workers (0.36 s to 0.24 s per (location, imt) task at 18). On
-  real realizations, with 30 workers on an 18 core machine, a task takes 1.16 s instead of 1.41 s. Quantiles change
-  by floating point rounding only (up to 4e-13 relative), because the cumulative weights are summed by bin; the
-  saved float32 curves are unchanged.
-  ([#107](https://github.com/GNS-Science/toshi-hazard-post/issues/107))
-- Each worker writes the composite rates into one buffer kept for all its tasks, instead of new memory for every
-  task, and the rates are written a block of composite branches and a level at a time. The operating system no
-  longer maps and zeroes ~345 MB for every NSHM_v1.0.4 task, which took about as long as the sum itself. The
-  composite rates step is about 2x faster with one worker (0.22 s to 0.11 s) and 1.55x with 18 to 30 workers. On
-  real realizations a task takes 0.66 s instead of 0.76 s with 18 workers, and 1.07 s instead of 1.16 s with 30. The
-  rates are bit-identical. ([#107](https://github.com/GNS-Science/toshi-hazard-post/issues/107))
-- The weighted mean and std read each level once instead of twice. Each block of 256 branches gives its weighted
-  sum and the squared deviations from its own mean while it is in cache, and the blocks are then combined; the
-  deviations are taken from a value near the mean, and each block is summed with 4 partial sums. The mean and std
-  step is about 1.8x faster with 18 to 36 workers. On real realizations a task takes 0.60 s instead of 0.66 s with
-  18 workers, and 0.98 s instead of 1.07 s with 30. Mean and std change by rounding only (up to ~1e-15 relative,
-  closer to a long double reference than before), and a std much smaller than its mean is now accurate to ~2e-16
-  instead of ~9e-12. ([#107](https://github.com/GNS-Science/toshi-hazard-post/issues/107))
-- The mean, std and quantiles are calculated straight from the component rates, without building the composite
-  rates array. Each level is done in two passes over the composite branches, each rate summed from the component
-  rates of the level as it is needed: the first gives the mean and std and puts each rate in its quantile bin,
-  keeping only the bin (2 bytes per branch), and the second sums again only the rates in the bins next to each
-  quantile. A worker no longer reads and writes ~345 MB per NSHM_v1.0.4 task, or holds the buffer for it between
-  tasks. For NSHM_v1.0.4 a task is about 1.45x faster with one worker and 1.5 to 1.6x faster with 18 to 30 workers.
-  On real realizations a task takes 0.40 s instead of 0.61 s with 18 workers and 0.66 s instead of 0.98 s with 30,
-  the run 47 s instead of 56 s and 36 s instead of 49 s, and peak machine memory falls from 21-26 GB to 14 GB.
-  The results are bit-identical. ([#107](https://github.com/GNS-Science/toshi-hazard-post/issues/107))
-- `aggregation_calc.build_branch_rates` takes an optional `out` array to write the rates into, and the new
-  `calculators.composite_rates_into` writes them into a given array.
+- The weighted mean, std and quantiles of each (location, imt) task are calculated straight from the component rates,
+  without building the ~345 MB array of composite rates that NSHM_v1.0.4 needs. Each level takes two passes over
+  the composite branches, each rate summed from the component rates as it is needed. The first pass gives the mean
+  and std, from blocks of 256 branches combined afterwards, and puts each rate in one of 16384 quantile bins,
+  keeping only its bin (2 bytes per branch). The bins are set from bounds on each level's rates, worked out from
+  the component rates, so no pass is needed to find the smallest and largest rate. The second pass sums again only
+  the rates in the bins next to each quantile. Before, the task wrote the composite rates to new memory and read
+  each level back five times, so it was limited by memory bandwidth.
+  - On an 18 core / 36 thread machine with NSHM_v1.0.4, a task takes 0.33 s instead of 0.79 s with 18 workers,
+    and 0.51 s instead of 1.27 s with 30. Throughput levels off at 55-59 tasks per second from 18 workers, instead
+    of about 24. The task now moves about 350 MiB to and from memory instead of about 2.6 GiB, and
+    uses about a fifth of the memory bandwidth at 18 workers, so the limit is now the physical cores.
+  - On real realizations, a task takes 0.37 s instead of 0.85 s with 18 workers and 0.67 s instead of 1.43 s with
+    30, and the run 47 s instead of 77 s and 36 s instead of 70 s. Peak machine memory falls from about 22 GB to
+    14 GB with 18 workers, and from about 27 GB to 14 GB with 30.
+  - Quantiles change by floating point rounding only (up to 4e-13 relative), because the cumulative weights are
+    summed by bin, and the saved float32 curves are unchanged. Mean and std change by rounding only (up to ~1e-15
+    relative, closer to a long double reference than before), and a std much smaller than its mean is now accurate
+    to ~2e-16 instead of ~9e-12. ([#107](https://github.com/GNS-Science/toshi-hazard-post/issues/107))
 - New `calculators.composite_rate_aggs` and `aggregation_calc.calculate_aggs_from_components` calculate the
   aggregates from the component rates and the branch index table; `calc_aggregation` uses them.
-- `calculators.weighted_quantiles` and `aggregation_calc.calculate_aggs` take optional `bounds` on the values of each
-  level, from the new `calculators.composite_rate_bounds`. `aggregation_calc.AggSharedArgs` has the new required
+- `calculators.weighted_quantiles` takes optional `bounds` on the values of each level, from the new
+  `calculators.composite_rate_bounds`. `aggregation_calc.AggSharedArgs` has the new required
   field `branch_index_columns`, from the new `logic_tree.branch_index_columns`.
 - `aggregation_calc.AggTaskArgs` has the job's probabilities in `probs` instead of `table_filepath`.
 - New `data.group_batch_rows` finds the rows of each job in a batch table, for `data.get_job_probs`.

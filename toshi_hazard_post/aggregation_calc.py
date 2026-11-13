@@ -114,20 +114,13 @@ def _assemble_aggs(
     return aggs
 
 
-def calculate_aggs(
-    branch_rates: 'npt.NDArray',
-    weights: 'npt.NDArray',
-    agg_types: Sequence[str],
-    bounds: tuple['npt.NDArray', 'npt.NDArray', 'npt.NDArray'] | None = None,
-) -> 'npt.NDArray':
+def calculate_aggs(branch_rates: 'npt.NDArray', weights: 'npt.NDArray', agg_types: Sequence[str]) -> 'npt.NDArray':
     """Calculate weighted aggregate statistics of the composite realizations.
 
     Args:
         branch_rates: hazard rates for every composite realization of the model with dimensions (IMTL, branch)
         weights: one dimensional array of weights for composite branches with dimensions (branch,)
         agg_types: the aggregate statistics to be calculated (e.g., "mean", "0.5") with dimension (agg_type,)
-        bounds: bounds on the rates of each level, which make the quantiles faster to find (see
-            calculators.weighted_quantiles() and calculators.composite_rate_bounds())
 
     Returns:
         hazard: aggregate rates array with dimension (agg_type, IMTL)
@@ -141,7 +134,7 @@ def calculate_aggs(
         mean, std = calculators.weighted_avg_and_std(branch_rates, weights)
     quantile_points = _quantile_points(agg_types)
     if quantile_points:
-        quantiles = calculators.weighted_quantiles(branch_rates, weights, quantile_points, bounds=bounds)
+        quantiles = calculators.weighted_quantiles(branch_rates, weights, quantile_points)
     return _assemble_aggs(agg_types, branch_rates.shape[0], mean, std, quantiles)
 
 
@@ -162,8 +155,9 @@ def calculate_aggs_from_components(
 ) -> 'npt.NDArray':
     """Calculate weighted aggregate statistics of the composite realizations from the component realizations.
 
-    The same, to the bit, as calculate_aggs() of the rates from build_branch_rates() with the bounds of
-    calculators.composite_rate_bounds(), without building the rates (see calculators.composite_rate_aggs()).
+    The same as calculate_aggs() of the rates from build_branch_rates(), without building the rates. The quantiles
+    are found with bounds on the rates of each level, so they can differ from those of calculate_aggs() by floating
+    point rounding (see calculators.composite_rate_aggs()).
 
     Args:
         branch_index_table: composite branches represented as rows of indices into component_rates
@@ -187,9 +181,7 @@ def calculate_aggs_from_components(
     return _assemble_aggs(agg_types, component_rates.shape[1], mean, std, quantiles if quantile_points else None)
 
 
-def build_branch_rates(
-    branch_index_table: 'npt.NDArray', component_rates: 'npt.NDArray', out: 'npt.NDArray | None' = None
-) -> 'npt.NDArray':
+def build_branch_rates(branch_index_table: 'npt.NDArray', component_rates: 'npt.NDArray') -> 'npt.NDArray':
     """Calculate the rate for the composite branches in the logic tree.
 
     The rate for a composite branch is the sum of rates of the component branches.
@@ -197,26 +189,15 @@ def build_branch_rates(
     Args:
         branch_index_table: composite branches represented as rows of indices into component_rates
         component_rates: component realization rates with shape (n component branches, n IMTL)
-        out: a float64, C ordered array with shape (n IMTL, n branches) to write the rates into, or None for a new
-            array. Writing into an array used again is about twice as fast as new memory.
 
     Returns:
-        The rates array with shape (n IMTL, n branches), out if given.
+        The rates array with shape (n IMTL, n branches)
 
     Raises:
         IndexError: if the branch index table refers to a component branch not in component_rates.
-        ValueError: if out does not have the shape, dtype or order of the rates.
     """
     _check_branch_index_table(branch_index_table, component_rates)
-    if out is None:
-        return calculators.composite_rates(branch_index_table, component_rates)
-    shape = (component_rates.shape[1], branch_index_table.shape[0])
-    if out.shape != shape or out.dtype != np.float64 or not out.flags.c_contiguous:
-        raise ValueError(
-            f"out must be a C ordered float64 array with shape {shape}, not {out.dtype} with shape {out.shape}"
-        )
-    calculators.composite_rates_into(branch_index_table, component_rates, out, calculators.COMPOSITE_RATES_BLOCK)
-    return out
+    return calculators.composite_rates(branch_index_table, component_rates)
 
 
 def calc_aggregation(task_args: AggTaskArgs, shared_args: AggSharedArgs) -> None:
