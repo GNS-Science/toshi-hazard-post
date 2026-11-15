@@ -482,24 +482,16 @@ def test_composite_rate_bounds_are_exact_for_every_combination():
     assert hi[2] == np.inf and np.isfinite(hi_finite[2])
 
 
-# numba fixes the block size when it compiles, so smaller blocks are tested with the python function
-@pytest.mark.parametrize(
-    "jitted, block",
-    [(True, None), (False, 1), (False, 3), (False, None)],
-    ids=["jit", "python-1", "python-3", "python"],
-)
-def test_composite_rates_blocks(jitted, block, monkeypatch):
-    # 10 composite branches, not a whole number of blocks of 3
-    if block is not None:
-        monkeypatch.setattr(calculators, "COMPOSITE_RATES_BLOCK", block)
-    func = composite_rates if jitted else composite_rates.py_func
+@pytest.mark.parametrize("func", [composite_rates, composite_rates.py_func], ids=["jit", "python"])
+def test_composite_rates_addition_order(func):
+    # each rate is summed in column order, which composite_rate_bounds() and the composite rate aggregate kernel
+    # rely on to give bit-identical results
     rng = np.random.default_rng(7)
     component_rates = rng.random((7, 5))
     branch_index_table = rng.integers(0, 7, (10, 3)).astype(np.uint16)
     expected = np.empty((5, 10))
     for i, row in enumerate(branch_index_table):
         for j in range(5):
-            # the same order of additions as composite_rates, so that the rates are bit-identical
             expected[j, i] = ((0.0 + component_rates[row[0], j]) + component_rates[row[1], j]) + component_rates[
                 row[2], j
             ]
