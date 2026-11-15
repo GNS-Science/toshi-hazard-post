@@ -409,7 +409,7 @@ def test_quantiles_of_many_branches():
 
 
 def test_warm_up_compiles_the_kernel_for_the_types_of_an_aggregation():
-    calculators.warm_up()
+    calculators.warm_up(np.dtype(np.uint16))
     signatures = list(calculators._select_quantiles.signatures)
     # float64 values in C order with an 8 quantile list, the types of an aggregation
     rng = np.random.default_rng(3)
@@ -648,11 +648,12 @@ def test_composite_rate_aggs_rejects(kwargs, match):
         calculators.composite_rate_aggs(**args)
 
 
-def test_warm_up_compiles_the_composite_rate_aggs_kernel_for_the_types_of_an_aggregation():
-    calculators.warm_up()
+# build_branch_index_table() uses the smallest unsigned type that holds the component indices
+@pytest.mark.parametrize("dtype", [np.uint8, np.uint16, np.uint32])
+def test_warm_up_compiles_the_composite_rate_aggs_kernel_for_the_types_of_an_aggregation(dtype):
+    calculators.warm_up(np.dtype(dtype))
     signatures = list(calculators._composite_rate_aggs.signatures)
-    # a uint16 index table and float64 rates, as calc_aggregation() passes
+    # the index table type and float64 rates, as calc_aggregation() passes
     table, component_rates, weights, columns = component_aggs_case(4, 5000)
-    calculators.composite_rate_aggs(table, component_rates, weights, [0.005, 0.5, 0.995], columns)
-    assert len(signatures) == 1
+    calculators.composite_rate_aggs(table.astype(dtype), component_rates, weights, [0.005, 0.5, 0.995], columns)
     assert calculators._composite_rate_aggs.signatures == signatures

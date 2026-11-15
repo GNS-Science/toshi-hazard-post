@@ -220,7 +220,7 @@ def run_aggregation(args: AggregationArgs, pool_executor: Executor | None = None
     log.info("starting %d calculations with %d workers", len(sites) * len(imts), NUM_WORKERS)
 
     # compile before the workers are started so that they do not each compile for their first task
-    calculators.warm_up()
+    calculators.warm_up(branch_index_table.dtype)
     pool_executor = pool_executor or ProcessPoolExecutor(max_workers=NUM_WORKERS)
     with (
         _shared_array(shared_args.weights_shm_name, weights),

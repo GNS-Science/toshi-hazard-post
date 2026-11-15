@@ -921,16 +921,20 @@ def composite_rate_aggs(
     )
 
 
-def warm_up() -> None:
+def warm_up(branch_index_dtype: np.dtype) -> None:
     """Compile the weighted quantiles and composite rate aggregate kernels, or load them from the numba cache.
 
     Call this before starting worker processes. Workers that are forked inherit the compiled kernels and workers
     that are spawned load them from the cache, rather than each of them compiling them for their first task.
+
+    Args:
+        branch_index_dtype: the type of the branch index table of the aggregation. The composite rate aggregate
+            kernel is compiled for each type, and logic_tree.build_branch_index_table() uses the smallest unsigned
+            type that holds the component indices.
     """
     weighted_quantiles(np.zeros((1, 2)), np.ones(2), [0.5])
-    # with the types of an aggregation: a uint16 branch index table (see logic_tree.build_branch_index_table())
     zeros = np.zeros(1)
     _composite_rate_aggs(
-        np.zeros((1, 1), dtype=np.uint16), np.zeros((1, 1)), np.ones(1), np.array([0.5]), zeros, zeros, zeros,
+        np.zeros((1, 1), dtype=branch_index_dtype), np.zeros((1, 1)), np.ones(1), np.array([0.5]), zeros, zeros, zeros,
         QUANTILE_NBINS, QUANTILE_SORT_SIZE,
     )  # fmt: skip
