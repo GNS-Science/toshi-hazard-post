@@ -113,6 +113,24 @@ class TestMeanStd:
         assert mean_scaled == pytest.approx(mean)
         assert std_scaled == pytest.approx(std)
 
+    # an infinite rate comes from a probability of 1.0. It is either in the block the deviations are taken from
+    # (the first with weight, after a block without), or in a later block
+    @pytest.mark.parametrize("position", [SUM_BLOCK_SIZE, SUM_BLOCK_SIZE + 3, 3 * SUM_BLOCK_SIZE - 1])
+    def test_infinite_value_gives_infinite_mean(self, func, position):
+        nbranches = 3 * SUM_BLOCK_SIZE
+        values = np.vstack((np.linspace(1.0, 2.0, nbranches), np.linspace(1.0, 2.0, nbranches)))
+        values[1, position] = np.inf
+        weights = np.ones(nbranches)
+        weights[:SUM_BLOCK_SIZE] = 0.0
+        weights[position] = 1.0
+
+        mean, std = func(values, weights)
+
+        assert mean[1] == np.inf
+        assert np.isnan(std[1])
+        # the other level is not affected
+        assert mean[0] == pytest.approx(np.average(values[0], weights=weights), rel=1e-12)
+
     @pytest.mark.parametrize("nweights", [4, 20])
     def test_weights_must_match_branches(self, func, nweights):
         values = np.ones((3, 10))
@@ -570,6 +588,19 @@ class TestCompositeRateAggs:
         expected = aggs_of_composite_rates(table, component_rates, weights, COMPONENT_AGGS_QUANTILES, columns, 64, 16)
         for a, e in zip(actual, expected, strict=True):
             np.testing.assert_array_equal(a, e, strict=True)
+
+    def test_infinite_rate_gives_infinite_mean(self):
+        # component 2 is in the first column and drawn by about one in six composite branches, so its infinite
+        # rate at level 3 is in the block the deviations are taken from. The weights are all positive: a branch
+        # with zero weight and an infinite rate adds 0 * inf, NaN, to the mean
+        table, component_rates, weights, columns = component_aggs_case(4, 5000)
+        weights = np.linspace(0.5, 1.5, weights.shape[0])
+        assert (table[:SUM_BLOCK_SIZE, 0] == 2).any()
+
+        mean, std, wq = calculators.composite_rate_aggs(table, component_rates, weights, [], columns)
+
+        assert mean[3] == np.inf
+        assert np.isnan(std[3])
 
     def test_no_quantiles(self):
         table, component_rates, weights, columns = component_aggs_case(4, 5000)

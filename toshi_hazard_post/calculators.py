@@ -115,14 +115,19 @@ def _block_weights(weights: 'npt.NDArray') -> 'npt.NDArray':
 
 @jit(nopython=True)
 def _shift(values: 'npt.NDArray', weights: 'npt.NDArray', block_weight: 'npt.NDArray') -> float:
-    """A value near the weighted mean to take deviations from: the mean of the first block with weight."""
+    """A value near the weighted mean to take deviations from: the mean of the first block with weight.
+
+    It is 0.0 if that mean is not finite (a value is infinite, from a probability of 1.0), as the deviations from
+    an infinite shift are all NaN, and the mean would be NaN rather than infinite.
+    """
     nbranches = values.shape[0]
     for b in range(block_weight.shape[0]):
         if block_weight[b] > 0.0:
             total = 0.0
             for j in range(b * SUM_BLOCK_SIZE, min((b + 1) * SUM_BLOCK_SIZE, nbranches)):
                 total += weights[j] * values[j]
-            return total / block_weight[b]
+            shift = total / block_weight[b]
+            return shift if np.isfinite(shift) else 0.0
     return 0.0
 
 
@@ -794,6 +799,8 @@ def _composite_rate_aggs(
                     total += weights[i] * _composite_rate(branch_index_table, i, level_rates, ncomponents)
                 shift = total / block_weight[b]
                 break
+        if not np.isfinite(shift):
+            shift = 0.0
 
         vmin = lo[j]
         vmax_finite = hi_finite[j]
