@@ -7,7 +7,7 @@
 [![codecov](https://codecov.io/gh/gns-science/toshi-hazard-post/branch/main/graphs/badge.svg)](https://codecov.io/github/gns-science/toshi-hazard-post)
 
 
-Seismic hazard from pre-calculated relizations. This application impliments the hazard calculation method described in [Calculation of National Seismic Hazard Models with Large Logic Trees: Application to the NZ NSHM 2022](https://doi.org/10.1785/0220230226).
+Seismic hazard from pre-calculated relizations. This application implements the hazard calculation method described in [Calculation of National Seismic Hazard Models with Large Logic Trees: Application to the NZ NSHM 2022](https://doi.org/10.1785/0220230226).
 
 
 * Documentation: <https://gns-science.github.io/toshi-hazard-post>

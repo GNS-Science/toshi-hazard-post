@@ -2,7 +2,7 @@
 name = "toshi-hazard-post"
 dynamic = ["version"]
 readme = "README.md"
-description = "Hazard post-processing pipeline as serverless AWS infrastructure."
+description = "Aggregate seismic hazard curves from pre-calculated realizations."
 authors = [
     {name = "Chris DiCaprio", email = "christopher.dicaprio@gmail.com"},
     {name = "Chris Chamberlain", email = "chrisbc@artisan.co.nz"},

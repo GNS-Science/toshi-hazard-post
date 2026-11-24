@@ -3,7 +3,7 @@
 ## [Unreleased]
 ### Changed
 - Require Python >=3.12,<4 (drop 3.10 and 3.11); test matrix is now 3.12, 3.13, 3.14.
-- Remove the unused Dockerfile, `.dockerignore`, `docker_environ` and `scripts/container_task.sh` (left over from v1; the image no longer built).
+- Remove the unused v1 deployment files: Dockerfile, `.dockerignore`, `docker_environ`, `scripts/container_task.sh` (the image no longer built) and `serverless.yml` (its Lambda handler was deleted in v2). The package description no longer says "serverless AWS infrastructure".
 ### Dependencies
 - Require pymdown-extensions >=13.1 (doc group, was <12); nzshm-common 0.11, nzshm-model 0.16.
 
