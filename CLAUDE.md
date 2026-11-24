@@ -13,7 +13,7 @@ make format                         # ruff format
 make lint                           # ruff check + mypy (both src AND tests)
 make unittest                       # uv run pytest
 make coverage                       # pytest with coverage report
-uv run tox                          # full matrix: py310/311/312 + format + lint + build
+uv run tox                          # full matrix: py312/313/314 + format + lint + build
 uv run pytest tests/test_logic_tree.py::test_registered_digests_unchanged   # a single test
 ```
 

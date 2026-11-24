@@ -2,7 +2,6 @@
 SCRATCH/
 scratch/
 node_modules/
-.serverless/
 
 # macOS
 .DS_Store

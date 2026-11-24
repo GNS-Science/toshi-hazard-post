@@ -65,9 +65,9 @@ plugins:
   - include-markdown
   - search:
       lang: en
-  - mkdocstrings:
-      watch:
-        - toshi_hazard_post
+  - mkdocstrings
+watch:
+  - toshi_hazard_post
 extra:
   social:
     # - icon: fontawesome/brands/twitter
