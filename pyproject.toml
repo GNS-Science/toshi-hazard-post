@@ -8,14 +8,16 @@ authors = [
     {name = "Chris Chamberlain", email = "chrisbc@artisan.co.nz"},
 ]
 license =  "AGPL-3.0"
-requires-python = ">=3.10,<3.13"
+requires-python = ">=3.12,<4"
 classifiers=[
     'Development Status :: 2 - Pre-Alpha',
     'Intended Audience :: Developers',
     'License :: OSI Approved :: MIT License',
     'Natural Language :: English',
     'Programming Language :: Python :: 3',
-    'Programming Language :: Python :: 3.10',
+    'Programming Language :: Python :: 3.12',
+    'Programming Language :: Python :: 3.13',
+    'Programming Language :: Python :: 3.14',
 ]
 dependencies = [
     "pandas>=2.0.3,<4",
