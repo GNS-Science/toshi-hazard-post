@@ -1,5 +1,12 @@
 # Changelog
 
+## [Unreleased]
+### Changed
+- Require Python >=3.12,<4 (drop 3.10 and 3.11); test matrix is now 3.12, 3.13, 3.14.
+- Docker base image is now `python:3.12-slim`.
+### Dependencies
+- Require pymdown-extensions >=13.1 (doc group, was <12); nzshm-common 0.11, nzshm-model 0.16.
+
 ## [0.8.0] - 2026-11-12
 ### Dependencies
 - deps: major: pyarrow 24→26, twine 6→7, plus transitives (backrefs, cryptography, filelock, multidict, pillow, readme-renderer, smart-open, watchdog, wcmatch); minor/patch: all in-range upgrades (84 lock entries), numba range widened to <0.69. pymdown-extensions 12 skipped (breaks mkdocs build).
