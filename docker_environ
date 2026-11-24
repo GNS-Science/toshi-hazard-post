@@ -1,7 +1,0 @@
-    NZSHM22_TOSHI_API_URL=https://aihssdkef5.execute-api.ap-southeast-2.amazonaws.com/prod/graphql
-    NZSHM22_HAZARD_STORE_STAGE=PROD
-    NZSHM22_SNS_AGG_TASK_TOPIC=nzshm22-toshi-hazard-post-prod-hazard-aggregation-task
-    REGION=ap-southeast-2
-    NZSHM22_HAZARD_STORE_REGION=ap-southeast-2
-    AWS_PROFILE=toshi_batch_devops
-    NZSHM22_HAZARD_POST_WORKERS=8

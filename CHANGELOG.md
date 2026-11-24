@@ -3,7 +3,7 @@
 ## [Unreleased]
 ### Changed
 - Require Python >=3.12,<4 (drop 3.10 and 3.11); test matrix is now 3.12, 3.13, 3.14.
-- Docker base image is now `python:3.12-slim`.
+- Remove the unused Dockerfile, `.dockerignore`, `docker_environ` and `scripts/container_task.sh` (left over from v1; the image no longer built).
 ### Dependencies
 - Require pymdown-extensions >=13.1 (doc group, was <12); nzshm-common 0.11, nzshm-model 0.16.
 
